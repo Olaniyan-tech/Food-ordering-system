@@ -1,0 +1,37 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pdb
+
+# Django stuff
+*.sqlite3
+db.sqlite3
+media/
+.env
+
+# Migrations 
+*/migrations/*.pyc
+*/migrations/*.pyo
+*/migrations/__pycache__/
+
+# Virtual environments
+venv/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Packaging
+*.egg-info/
+*.egg
+dist/
+build/

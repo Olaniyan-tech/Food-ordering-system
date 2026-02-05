@@ -26,7 +26,7 @@ class Food(models.Model):
     slug = models.CharField(max_length=70, db_index=True, blank=True)
     descriptions = models.TextField(blank=True)
     price = models.FloatField()
-    image_url = models.ImageField(upload_to="foods/", null=True, blank=True)
+    image_url = models.ImageField(upload_to="images/", null=True, blank=True)
     available = models.BooleanField(default=True)
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)

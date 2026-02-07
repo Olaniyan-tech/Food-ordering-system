@@ -50,7 +50,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
             value=response_data['access'],
             httponly=True,
             samesite='Lax',
-            secure=True,
+            secure=not DEBUG,
             max_age=30*60,
         )
 
@@ -59,7 +59,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
             value=response_data['refresh'],
             httponly=True,
             samesite='Lax',
-            secure=True,
+            secure=not DEBUG,
             max_age=7*24*60*60
         )
         return response
@@ -82,7 +82,7 @@ class CookieTokenRefreshView(TokenRefreshView):
             value=new_access,
             httponly=True,
             samesite='Lax',
-            secure=True,
+            secure=not DEBUG,
             max_age=30*60
         )
         return response

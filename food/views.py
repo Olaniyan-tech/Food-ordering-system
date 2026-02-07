@@ -5,7 +5,7 @@ from rest_framework import status
 from food.models import Food, Order, OrderItem
 from .serializers import FoodSerializer, OrderSerializer, AddToCartSerializer, OrderDeliveryDetailSerializer
 
-#Should i set secure=True in cookies
+
 
 class AllFoodView(generics.ListAPIView):
         queryset = Food.objects.filter(available=True)

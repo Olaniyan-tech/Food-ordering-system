@@ -100,7 +100,7 @@ if DEBUG:
 else:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOWED_ORIGINS = [
-        config("FRONTEND_URL")
+        config("FRONTEND_URL", default="http://localhost:3000")
     ]
 
 ROOT_URLCONF = 'food_site.urls'

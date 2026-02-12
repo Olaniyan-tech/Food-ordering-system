@@ -98,6 +98,11 @@ class Order(models.Model):
     def update_total(self):
         self.total = sum(item.subtotal for item in self.items.all())
         self.save(update_fields=["total"])
+    
+    def save(self, *args, **kwargs):
+        if not self.phone and hasattr(self.user, "profile"):
+            self.phone = self.user.profile.phone
+        super().save(*args, **kwargs)
 
 
 class OrderItem(models.Model):

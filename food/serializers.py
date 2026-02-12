@@ -48,9 +48,26 @@ class OrderDeliveryDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = ("address", "phone")
     
-    def validate_phone(self, value):
-        if not value.isdigit():
-            raise serializers.ValidationError("Phone number must contain digits only")
-        
+    def validate_address(self, value):
+        if not value:
+            raise serializers.ValidationError("Address is required for checkout.")
         return value
+    
+    def validate_phone(self, value):
+        if value and not value.isdigit():
+            raise serializers.ValidationError("Phone number must contain digits only.")     
+        return value
+    
+    def update(self, instance, validated_data):
+        instance.address = validated_data.get("address", instance.address)
+
+        phone = validated_data.get("phone")
+        if not phone:
+            if hasattr(instance.user, "profile") and instance.user.profile.phone:
+                phone = instance.user.profile.phone
+            else:
+                raise serializers.ValidationError("Phone number is required.")
         
+        instance.phone = phone
+        instance.save(update_fields=["address", "phone"])
+        return instance

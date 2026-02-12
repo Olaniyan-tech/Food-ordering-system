@@ -10,9 +10,9 @@ from .views import(
     AllOrdersView
 )
 
-
+app_name = "food"
 urlpatterns = [
-    path("foods/", AllFoodView.as_view()),
+    path("menu/", AllFoodView.as_view()),
     path("my-orders/", AllOrdersView.as_view()),
     path("add_to_cart/", AddToCartView.as_view()),
     path("remove/", RemoveFromCartView.as_view()),

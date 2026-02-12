@@ -4,6 +4,9 @@ from rest_framework import generics
 from rest_framework import status
 from food.models import Food, Order, OrderItem
 from .serializers import FoodSerializer, OrderSerializer, AddToCartSerializer, OrderDeliveryDetailSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -103,11 +106,23 @@ class CheckOutView(APIView):
         except Order.DoesNotExist:
             return Response({"error": "No pending order to checkout"}, status=status.HTTP_404_NOT_FOUND)
         
-        if not order.address or not order.phone:
-            return Response({"error" : "Address and phone number are required"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = OrderDeliveryDetailSerializer(
+            instance=order,
+            data=request.data,
+            context={"request": request},
+            partial=True
+        )
+
+        if not serializer.is_valid():
+            logger.warning(f"Checkout validation failed for user {user.username}: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
 
         order.status = "out for delivery"
         order.save(update_fields=["status"])
+        logger.info(f"User {user.username} checkedout for order {order.id} successfully.")
+        
         return Response(
             {"message": "Order checked out successfully",
             "user" : user.username,

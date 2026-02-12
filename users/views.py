@@ -20,22 +20,31 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            logger.info(f"New user registered: {user.email if hasattr(user, 'email') else user.username}")
-            return Response({
-                "message": "Account created successfully. Please log in to continue",
-                "username": user.username,
-                "email": user.email,
-                "phone": user.phone},
-                status=status.HTTP_201_CREATED)
+        logger.info(f"Incoming registration request: {request.data}")
+
+        try:
+            serializer = RegisterSerializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.save()
+                logger.info(f"New user registered: {user.email if hasattr(user, 'email') else user.username}")
+                return Response({
+                    "message": "Account created successfully. Please log in to continue",
+                    "username": user.username,
+                    "email": user.email,
+                    "phone": user.phone},
+                    status=status.HTTP_201_CREATED)
         
-        logger.warning(f"Registration failed: {serializer.errors}")
-        return Response({
-            "message": "Registration failed. Check input.",
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning(f"Registration failed: {serializer.errors}")
+            return Response({
+                "message": "Registration failed. Check input.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.exception("Unexpected error during registration")
+            return Response({
+                "message": "Server error occurred during registration"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CookieTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]

@@ -18,13 +18,21 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from users.views import HomePageRedirectView
+from django.http import JsonResponse
+
+
+def api_home(request):
+    return JsonResponse({
+        "message": "Food Ordering System",
+        "status": "running"
+    })
+
 
 urlpatterns = [
-    path('api/users/', include('users.urls')),
+    path('', api_home),
     path('admin/', admin.site.urls),
-    path('api/', include('food.urls')),  
-    path('', HomePageRedirectView.as_view())  
+    path('api/users/', include('users.urls')),
+    path('api/', include('food.urls')),   
 ]
 
 

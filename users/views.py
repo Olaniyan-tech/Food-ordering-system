@@ -31,7 +31,7 @@ class RegisterView(APIView):
                     "message": "Account created successfully. Please log in to continue",
                     "username": user.username,
                     "email": user.email,
-                    "phone": user.phone},
+                    "phone": user.profile.phone},
                     status=status.HTTP_201_CREATED)
         
             logger.warning(f"Registration failed: {serializer.errors}")

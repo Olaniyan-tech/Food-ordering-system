@@ -37,10 +37,8 @@ class AddToCartView(APIView):
         except Food.DoesNotExist:
             return Response({"error": "Food not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            order, _ = Order.objects.get_or_create(user=request.user, status="pending")
-        except Order.DoesNotExist:
-            return Response({"error": "Cart is empty"})
+        order, _ = Order.objects.get_or_create(user=request.user, status="pending")
+
 
         order.add_item(food, quantity)
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)

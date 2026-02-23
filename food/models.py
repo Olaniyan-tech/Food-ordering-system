@@ -110,7 +110,7 @@ class OrderItem(models.Model):
     food = models.ForeignKey(Food, on_delete=models.CASCADE, related_name="food_items")
     quantity = models.PositiveIntegerField(default=1)
     price_at_purchase = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    subtotal = models.FloatField(blank=True, null=True)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
     def __str__(self):
         return f"{self.quantity} * {self.food.name}"

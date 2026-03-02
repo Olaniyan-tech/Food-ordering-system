@@ -3,7 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from .models import Profile
-import re
+from users.validators import validate_phone_format
 
 class RegisterSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True)
@@ -21,11 +21,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
     
     def validate_phone(self, value):
-        if not re.match(r'^\+[1-9]\d{7,14}$', value):
-            raise serializers.ValidationError("Phone number must be in international format e.g. +2348076345218")
+        validate_phone_format(value)
         
         if Profile.objects.filter(phone=value).exists():
             raise serializers.ValidationError("Phone number already exists.")
+        
         return value
     
     def validate_password(self, value):

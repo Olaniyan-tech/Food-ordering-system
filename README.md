@@ -16,7 +16,7 @@ The project is designed to be scalable, maintainable, and ready for integration 
 
 - Updating cart items (increase, decrease, delete)
 
-- Checkout with address and phone submission
+- Checkout with address and phone number submission
 
 - Cancel pending orders
 

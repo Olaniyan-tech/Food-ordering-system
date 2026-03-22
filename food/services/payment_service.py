@@ -24,6 +24,7 @@ def initialize_payment(order):
         "email": order.user.email,
         "amount": int(order.total * 100),
         "reference": reference,
+        "callback_url": f"{settings.BASE_URL}/api/order/verify/{reference}/", 
         "metadata": {
             "order_id": order.id,
             "user_id": order.user.id,

@@ -250,7 +250,7 @@ class VerifyPaymentView(APIView):
         return Response({
             "error": "Payment failed",
             "payment_status": order.payment_status
-        }, status=status.HTTP_400_BAD_REQUEST)
+        }, status=status.HTTP_402_PAYMENT_REQUIRED)
 
 @method_decorator(csrf_exempt, name="dispatch")
 class PayStackWebhookView(APIView):

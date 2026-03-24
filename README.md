@@ -328,6 +328,26 @@ Content-Type: application/json
     }
   ```
 
+### Initialize Payment
+
+POST /api/order/order_id/pay
+Content-Type: application/json
+
+```json
+✅ Response (200 OK)
+{
+  "payment_url": "https://paystack.com/pay/abc123",
+  "reference": "ORDER-9-73C1A641"
+}
+```
+```json
+❌ Error (400 Bad Request)
+{
+   "error": "Order has already been paid for"
+}
+```
+
+
 ## Testing the API
 
 You can test this API using any API client such as:

@@ -293,6 +293,41 @@ Content-Type: application/json
     }
   ```
 
+  ### Order details
+
+POST /api/order/order_id
+Content-Type: application/json
+
+- Success Response (200 OK):
+  ```json
+    {
+     "id": 9,
+    "user": "Adebayo",
+    "address": "Laaro Area, Ilobu, Osun State",
+    "phone": "+2349039624784",
+    "total": "300.00",
+    "status": "CONFIRMED",
+    "date_created": "2026-03-23T22:56:28.433819Z",
+  
+  "items": [
+        {
+            "id": 9,
+            "food": {
+                "id": 1,
+                "name": "Fried Rice",
+                "price": "300.00",
+                "descriptions": "",
+                "image_url": null,
+                "category": "Main Course"
+            },
+            "quantity": 1,
+            "price_at_purchase": "300.00",
+            "subtotal": 300.0
+        }
+     ]
+    }
+  ```
+
 ## Testing the API
 
 You can test this API using any API client such as:

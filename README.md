@@ -293,7 +293,7 @@ Content-Type: application/json
     }
   ```
 
-  ### Order details
+### Order details
 
 POST /api/order/order_id
 Content-Type: application/json
@@ -333,17 +333,43 @@ Content-Type: application/json
 POST /api/order/order_id/pay
 Content-Type: application/json
 
-```json
 ✅ Response (200 OK)
+```json
+
 {
   "payment_url": "https://paystack.com/pay/abc123",
   "reference": "ORDER-9-73C1A641"
 }
 ```
-```json
 ❌ Error (400 Bad Request)
+```json
+
 {
    "error": "Order has already been paid for"
+}
+```
+
+### Verify Payment
+
+POST /api/order/verify/reference_id
+Content-Type: application/json
+
+✅ Response (200 OK)
+```json
+
+{
+  "message": "Payment successfull",
+  "order_id": 9,
+  "payment_status": "PAID",
+  "amount_paid": 300.0
+}
+```
+❌ Error (402 Payment required)
+```json
+
+{
+   "error": "Payment failed",
+   "payment_status": "Failed"
 }
 ```
 

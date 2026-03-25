@@ -1,5 +1,5 @@
 from django.contrib import admin
-from food.models import Food, Order, OrderStatusHistory, OrderItem, Category
+from food.models import Food, Order, OrderStatusHistory, OrderItem, Category, Review
 
 
 admin.site.register(Food)
@@ -31,3 +31,8 @@ class CategoryAdmin(admin.ModelAdmin):
     inlines = [FoodInline]
 
 admin.site.register(Category, CategoryAdmin)
+
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ["id", "user", "order", "rating", "created_at"]
+    readonly_fields = ["created_at", "updated_at"]
+admin.site.register(Review, ReviewAdmin)

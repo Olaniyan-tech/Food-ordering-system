@@ -7,8 +7,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import generics
 from rest_framework import status
-from food.models import Food, Order
-from .serializers import FoodSerializer, OrderSerializer, AddToCartSerializer, OrderDeliveryDetailSerializer
+from food.models import Food, Order, Review
+from .serializers import (
+    FoodSerializer, 
+    OrderSerializer, 
+    AddToCartSerializer, 
+    OrderDeliveryDetailSerializer, 
+    ReviewSerializer
+)
 from food.services.cart_service import add_item_to_cart, remove_item_from_cart
 from food.services.order_service import ( 
     cancel_order, 
@@ -19,6 +25,7 @@ from food.services.order_service import (
     mark_delivered
 )    
 from food.services.payment_service import initialize_payment, verify_payment
+from food.services.review_service import create_review, get_order_review, get_food_reviews
 from food.permissions import IsStaffOrReadOnly, IsOrderOwner, IsStaff
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
@@ -285,3 +292,55 @@ class PayStackWebhookView(APIView):
                 pass
         
         return Response({"message": "ok"}, status=status.HTTP_200_OK)
+
+class CreateReviewView(APIView):
+
+    def post(self, request, order_id):
+        try:
+            order = Order.objects.get(id=order_id, user=request.user)
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+        serializer = ReviewSerializer(
+            data=request.data,
+            context={"request": request, "order": order}
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            review = create_review(
+                order=order, 
+                user=request.user, 
+                validated_data=serializer.validated_data
+            )
+        except ValidationError as e:
+            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"User {request.user.username} reviewed Order {order_id}")
+
+        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+class OrderReviewDetailView(APIView):
+    
+    def get(self, request, order_id):
+        try:
+            order = Order.objects.get(id=order_id, user=request.user)
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            review = get_order_review(order, user=request.user)
+        except ValidationError as e:
+            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(ReviewSerializer(review).data, status=status.HTTP_200_OK)
+    
+class FoodReviewsView(APIView):
+    serializer_class = ReviewSerializer
+    permission_classes = []
+
+    def get_queryset(self):
+        food_id = self.context["food_id"]
+        return get_food_reviews(food_id)

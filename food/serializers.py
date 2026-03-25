@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from food.models import Food, Order, OrderItem
-import re
+from food.models import Food, Order, OrderItem, Review
 from users.validators import validate_phone_format
 
 class FoodSerializer(serializers.ModelSerializer):
@@ -20,6 +19,7 @@ class FoodSerializer(serializers.ModelSerializer):
             return obj.image_url.url
         return None
 
+
 class OrderItemSerializer(serializers.ModelSerializer):
     food = FoodSerializer(read_only=True)
     subtotal = serializers.SerializerMethodField()
@@ -31,6 +31,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
     def get_subtotal(self, obj):
         return obj.subtotal
 
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     user = serializers.CharField(source='user.username', read_only=True)
@@ -38,6 +39,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ("id", "user", "address", "phone", "total", "status", "date_created", "items")
+
 
 class AddToCartSerializer(serializers.ModelSerializer):
     food = serializers.IntegerField()
@@ -81,3 +83,42 @@ class OrderDeliveryDetailSerializer(serializers.ModelSerializer):
         instance.phone = phone
         instance.save(update_fields=["address", "phone"])
         return instance
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = Review
+        fields = ["id", "username", "rating", "comment", "photo", "created_at"]
+        readonly_fields = ["id", "username", "created_at"]
+    
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5")
+        return value
+    
+    def validate(self, data):
+        request = self.context["request"]
+        order = self.context["order"]
+
+        if order.user != request.user:
+            raise serializers.ValidationError("You can only review your own orders")
+        
+        if order.status != "DELIVERED":
+            raise serializers.ValidationError("You can only review delivered orders")
+        
+        if hasattr(order, "review"):
+            raise serializers.ValidationError("You have already reviewed this order")
+        
+        return data
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        order = self.context["order"]
+
+        return Review.objects.create(
+            order=order,
+            user=request.user,
+            **validated_data
+        )

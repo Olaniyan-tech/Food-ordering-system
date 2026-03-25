@@ -8,7 +8,7 @@ class FoodSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Food
-        fields = ("id", "name", "price", "descriptions", "image_url", "category")
+        fields = ("id", "name", "price", "descriptions", "image_url", "category", "stock")
 
 
     def get_image_url(self, obj):
@@ -91,7 +91,7 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ["id", "username", "rating", "comment", "photo", "created_at"]
-        readonly_fields = ["id", "username", "created_at"]
+        read_only_fields = ["id", "username", "created_at"]
     
     def validate_rating(self, value):
         if value < 1 or value > 5:

@@ -34,6 +34,6 @@ urlpatterns = [
     path("webhook/paystack/", PayStackWebhookView.as_view(), name="webhook-paystack"),
     path("order/<int:order_id>/review/", CreateReviewView.as_view(), name="create-review"),
     path("order/<int:order_id>/review/detail/", OrderReviewDetailView.as_view(), name="order-review-detail"),
-    path("foods/<int:food_id/reviews/", FoodReviewsView.as_view(), name="food-reviews")
+    path("foods/<int:food_id>/reviews/", FoodReviewsView.as_view(), name="food-reviews")
 
 ]

@@ -13,7 +13,7 @@ class OrderItemInline(admin.StackedInline):
 
 class OrderAdmin(admin.ModelAdmin):
     inlines = [OrderItemInline]
-    list_display = ['id', 'user', 'total', 'status', 'date_created', 'updated', 'payment_status']
+    list_display = ['id', 'user', 'address', 'total', 'status',  'date_created', 'updated', 'payment_status']
 admin.site.register(Order, OrderAdmin)
 
 class OrderHistoryStatusAdmin(admin.ModelAdmin):
@@ -33,6 +33,6 @@ class CategoryAdmin(admin.ModelAdmin):
 admin.site.register(Category, CategoryAdmin)
 
 class ReviewAdmin(admin.ModelAdmin):
-    list_display = ["id", "user", "order", "rating", "created_at"]
+    list_display = ["id", "user", "order", "rating", "comment", "created_at"]
     readonly_fields = ["created_at", "updated_at"]
 admin.site.register(Review, ReviewAdmin)

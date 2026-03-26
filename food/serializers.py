@@ -98,27 +98,3 @@ class ReviewSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Rating must be between 1 and 5")
         return value
     
-    def validate(self, data):
-        request = self.context["request"]
-        order = self.context["order"]
-
-        if order.user != request.user:
-            raise serializers.ValidationError("You can only review your own orders")
-        
-        if order.status != "DELIVERED":
-            raise serializers.ValidationError("You can only review delivered orders")
-        
-        if hasattr(order, "review"):
-            raise serializers.ValidationError("You have already reviewed this order")
-        
-        return data
-
-    def create(self, validated_data):
-        request = self.context["request"]
-        order = self.context["order"]
-
-        return Review.objects.create(
-            order=order,
-            user=request.user,
-            **validated_data
-        )

@@ -1,7 +1,11 @@
 from django.db import transaction
 from django.utils import timezone
 from food.models import Order, OrderStatusHistory
+from food.tasks import send_order_status_email, send_payment_email
 from django.core.exceptions import ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 STATUS_TIMESTAMP_FIELDS = {
@@ -18,18 +22,20 @@ STATUS_TIMESTAMP_FIELDS = {
 @transaction.atomic
 def update_order_status(order, new_status, changed_by=None):
     if order.status == new_status:
-        return order
-
+        raise ValidationError(f"Order is already {new_status}")
+    
     order.status = new_status
-    timestamp_field =STATUS_TIMESTAMP_FIELDS.get(new_status) 
+    timestamp_field = STATUS_TIMESTAMP_FIELDS.get(new_status)
 
     if timestamp_field:
         setattr(order, timestamp_field, timezone.now())
-
+    else:
+        logger.warning(f"No timestamp field for status {new_status}")
+    
     update_fields = ["status", "updated"]
-
     if timestamp_field:
         update_fields.append(timestamp_field)
+
     order.save(update_fields=update_fields)
 
     if changed_by:
@@ -38,6 +44,8 @@ def update_order_status(order, new_status, changed_by=None):
             status=new_status,
             changed_by=changed_by
         )
+
+    transaction.on_commit(lambda: send_order_status_email.delay(order.id, new_status))
 
     return order
 
@@ -87,6 +95,7 @@ def cancel_order(order, user=None):
 
     return update_order_status(order, "CANCELLED", changed_by=user)
 
+
 @transaction.atomic
 def mark_out_for_delivery(order, user=None):
     valid_pre_states = ["CONFIRMED", "PREPARING", "READY"]
@@ -95,6 +104,7 @@ def mark_out_for_delivery(order, user=None):
     
     return update_order_status(order, "OUT FOR DELIVERY", changed_by=user)
 
+
 @transaction.atomic
 def mark_delivered(order, user=None):
     if order.status != "OUT FOR DELIVERY":
@@ -102,6 +112,17 @@ def mark_delivered(order, user=None):
     
     return update_order_status(order, "DELIVERED", changed_by=user)
 
+
+@transaction.atomic
+def update_payment_status(order, status):
+    order = Order.objects.select_for_update().get(id=order.id)
+                                                  
+    if order.payment_status == status:
+        return
+    order.payment_status = status
+    order.save(update_fields=["payment_status", "updated"])
+
+    transaction.on_commit(lambda: send_payment_email.delay(order.id, status))
 
 # @transaction.atomic
 # def mark_refunded(order, user=None, reason=None):

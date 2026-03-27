@@ -391,9 +391,6 @@ class UpdateReviewView(APIView):
         if not review:
             return Response({"error": "No review found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if review.user != request.user:
-            return Response({"error": "You can only edit your own review"}, status=status.HTTP_403_FORBIDDEN)
-
         serializer = ReviewSerializer(review, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

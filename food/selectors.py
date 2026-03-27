@@ -1,4 +1,5 @@
 from food.models import Food, Order, Review
+from django.db.models import Avg, Count
 
 def get_available_foods():
     return Food.objects.filter(available=True)
@@ -48,6 +49,8 @@ def get_food_reviews(food_id):
     return Review.objects.filter(
         order__items__food__id=food_id
     ).select_related("user").order_by("-created_at")
+
+
 
 
 

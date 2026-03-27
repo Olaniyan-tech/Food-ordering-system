@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'food.apps.FoodConfig',
     'users.apps.UsersConfig',
     'corsheaders',
+
+    'drf_spectacular',
 ]
 
 REST_FRAMEWORK = {
@@ -61,7 +63,17 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
 
-    "EXCEPTION_HANDLER": "food.exceptions.custom_exception_handler"
+    'DEFAULT_SCHEMA_CLASS' : 'drf_spectacular.openapi.AutoSchema',
+
+    'EXCEPTION_HANDLER': 'food.exceptions.custom_exception_handler',
+}
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Food Ordering System API',
+    'DESCRIPTION': 'API documentation for the Food Ordering System',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 SIMPLE_JWT = {

@@ -372,7 +372,10 @@ class CreateReviewView(APIView):
         
         logger.info(f"User {request.user.username} reviewed Order {order_id}")
 
-        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Review submitted successfully",
+            "data": ReviewSerializer(review).data
+        }, status=status.HTTP_201_CREATED)
 
         
 class OrderReviewDetailView(APIView):

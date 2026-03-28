@@ -2,7 +2,6 @@ from celery import shared_task
 from django.core.mail import send_mail
 from food.selectors import get_order_by_id_for_email
 from food.models import Order
-from django.contrib.auth.models import User
 from django.conf import settings
 import logging
 

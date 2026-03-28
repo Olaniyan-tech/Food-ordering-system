@@ -43,9 +43,7 @@ from food.selectors import (
     get_food_reviews,
     get_food_review_stats
 )
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from food.filters import FoodFilter, OrderFilter, ReviewFilter
+from food.filters import FoodFilter, OrderFilter
 from rest_framework.pagination import PageNumberPagination
 from food.permissions import IsStaffOrReadOnly, IsOrderOwner, IsStaff
 from django.core.exceptions import ValidationError

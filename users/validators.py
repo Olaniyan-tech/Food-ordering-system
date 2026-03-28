@@ -1,8 +1,16 @@
 import re
 from rest_framework import serializers
+import phonenumbers
 
 def validate_phone_format(value):
-    if not re.match(r'^\+[1-9]\d{7,14}$', value):
+    try:
+        phone = phonenumbers.parse(value)
+        if not phonenumbers.is_valid_number(phone):
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code e.g +2349039624784"
+            )
+    
+    except phonenumbers.NumberParseException:
         raise serializers.ValidationError(
-            "Phone number must be in international format e.g. +2348076345218"
+            "Enter a valid phone number with country code e.g. +2348012345678"
         )

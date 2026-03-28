@@ -17,11 +17,18 @@ def send_welcome_email(self, user_id):
     try:
         send_mail(
             subject="Welcome to OlaTech Food 🍔",
-            message=f"Hi {user.username},\n\nWelcome to OlaTech Food! We're excited to have you.\n\nStart exploring our menu and place your first order today.\n\nOlaTech Food",
+            message=f"Hi {user.username}, Welcome to OlaTech Food! We're excited to have you. Start exploring our menu and place your first order today. OlaTech Food",
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
-            fail_silently=False
+            fail_silently=False,
+            html_message=f"""
+                <h2>Hi {user.username},</h2>
+                <p>Welcome to OlaTech Food! We're excited to have you.</p>
+                <p>Start exploring our menu and place your first order today.</p>
+                <p>OlaTech Food</p>
+            """
         )
+        
         logger.info(f"Welcome email sent to {user.email}")
     
     except Exception as exc:

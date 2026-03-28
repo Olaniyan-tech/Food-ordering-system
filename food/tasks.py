@@ -57,7 +57,7 @@ def send_order_status_email(self, order_id, new_status):
         
         send_mail(
             subject=email_data["subject"],
-            message=f"Hi {order.user.username},\n\n{email_data['message']}\n\nOrder ID: {order.id}\nTotal: ₦{order.total}\n\nThank you for choosing OlaTech Food!",
+            message=f"Hi {order.user.username},\n\n{email_data['message']}\n\nTotal: ₦{order.total}\n\nThank you for choosing OlaTech Food!",
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[order.user.email],
             fail_silently=False
@@ -81,11 +81,11 @@ def send_payment_email(self, order_id, payment_status):
     try:
         if payment_status == "PAID":
             subject = "Payment successful ✅"
-            message = f"Hi {order.user.username},\n\nYour payment of ₦{order.total} has been received successfully.\n\nOrder ID: {order.id}\n\nThank you for choosing OlaTech Food!"
+            message = f"Hi {order.user.username},\n\nYour payment of ₦{order.total} has been received successfully.\n\nPayment Reference: {order.payment_reference}\n\nThank you for choosing OlaTech Food!"
         
         else:
             subject = "Payment failed ❌"
-            message = f"Hi {order.user.username},\n\nUnfortunately your payment for Order {order.id} failed.\n\nPlease try again or contact support.\n\nOlaTech Food"
+            message = f"Hi {order.user.username},\n\nUnfortunately your payment for Order {order.payment_reference} failed.\n\nPlease try again or contact support.\n\nOlaTech Food"
         
         send_mail(
             subject=subject,

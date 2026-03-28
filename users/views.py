@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from drf_spectacular.utils import extend_schema
 import logging
 from django.conf import settings
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(request=RegisterSerializer, responses={201: RegisterSerializer})
     def post(self, request):
         logger.info(f"Incoming registration request: {request.data}")
 
@@ -117,6 +119,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(responses={200: None})
     def post(self, request):
         refresh_token = request.COOKIES.get("refresh_token")
 
@@ -138,6 +141,8 @@ class LogoutView(APIView):
         return response
 
 class UserProfileView(APIView):
+
+    @extend_schema(responses={200: None})
     def get(self, request):
         return Response({
             "username": request.user.username,

@@ -43,8 +43,13 @@ from food.selectors import (
     get_food_reviews,
     get_food_review_stats
 )
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+from food.filters import FoodFilter, OrderFilter, ReviewFilter
+from rest_framework.pagination import PageNumberPagination
 from food.permissions import IsStaffOrReadOnly, IsOrderOwner, IsStaff
 from django.core.exceptions import ValidationError
+from drf_spectacular.utils import extend_schema
 import logging
 
 logger = logging.getLogger(__name__)
@@ -53,6 +58,10 @@ logger = logging.getLogger(__name__)
 class AllFoodView(generics.ListAPIView):
     serializer_class = FoodSerializer
     permission_classes = [IsStaffOrReadOnly]
+    filterset_class = FoodFilter
+    search_fields = ["name", "descriptions"]
+    ordering_fields = ["price", "name"]
+    ordering = ["-created"]
 
     def get_queryset(self):
         return get_available_foods()
@@ -64,9 +73,14 @@ class AllFoodView(generics.ListAPIView):
 
 class AllOrdersView(generics.ListAPIView):
     serializer_class = OrderSerializer
+    filterset_class = OrderFilter
+    ordering_fields = ["date_created", "total"]
+    ordering = ["-date_created"]
     
     def get_queryset(self):
-        return get_user_orders(self.request.user)
+        if getattr(self, "swagger_fake_view", False):
+            return Order.objects.none()
+        return get_user_orders(self.request.user)    
 
     @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True)) 
     def get(self, request, *args, **kwargs):
@@ -75,6 +89,7 @@ class AllOrdersView(generics.ListAPIView):
 
 class AddToCartView(APIView):
 
+    @extend_schema(request=AddToCartSerializer, responses={201: OrderSerializer})
     @method_decorator(ratelimit(key="user", rate="20/m", method="POST", block=True))
     def post(self, request):
         serializer = AddToCartSerializer(data=request.data)
@@ -100,6 +115,7 @@ class AddToCartView(APIView):
 
 class RemoveFromCartView(APIView):
 
+    @extend_schema(responses={200: OrderSerializer})
     @method_decorator(ratelimit(key="user", rate="10/m", method="POST", block=True))
     def post(self, request):
         user = request.user
@@ -121,6 +137,7 @@ class RemoveFromCartView(APIView):
    
 class CancelOrderView(APIView):
 
+    @extend_schema(responses={200: None})
     @method_decorator(ratelimit(key="user", rate="5/m", method="DELETE", block=True))
     def delete(self, request):
         order = get_pending_order(request.user)
@@ -138,6 +155,7 @@ class CancelOrderView(APIView):
    
 class UpdateOrderDetailView(APIView):
 
+    @extend_schema(request=OrderDeliveryDetailSerializer, responses={200: None})
     @method_decorator(ratelimit(key="user", rate="10/m", method="PATCH", block=True))
     def patch(self, request):
         order = get_pending_order(request.user)
@@ -154,6 +172,7 @@ class UpdateOrderDetailView(APIView):
 
 class CheckOutView(APIView):
 
+    @extend_schema(request=OrderDeliveryDetailSerializer, responses={200: OrderSerializer})
     @method_decorator(ratelimit(key="user", rate="5/m", method="POST", block=True))
     def post(self, request):
         user = request.user
@@ -220,6 +239,7 @@ STATUS_TRANSITION_MAP = {
 class OrderStatusUpdateView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(responses={200: OrderSerializer})
     @method_decorator(ratelimit(key="user", rate="30/m", method="PATCH", block=True))
     def patch(self, request, order_id):  
         try:
@@ -248,6 +268,7 @@ class OrderStatusUpdateView(APIView):
 
 class InitializePaymentView(APIView):
 
+    @extend_schema(responses={200: None})
     @method_decorator(ratelimit(key="user", rate="5/m", method="POST", block=True))
     def post(self, request, order_id):
         try:
@@ -267,7 +288,8 @@ class InitializePaymentView(APIView):
                 
 
 class VerifyPaymentView(APIView):
-       
+    
+    @extend_schema(responses={200: None})
     @method_decorator(ratelimit(key="user", rate="10/m", method="GET", block=True))
     def get(self, request, reference):
         try:
@@ -305,6 +327,7 @@ class VerifyPaymentView(APIView):
 class PayStackWebhookView(APIView):
     permission_classes = []
 
+    @extend_schema(exclude=True)
     @method_decorator(ratelimit(key="ip", rate="5/m", method="POST", block=True))
     def post(self, request):
         paystack_signature = request.headers.get("x-paystack-signature")
@@ -349,6 +372,7 @@ class PayStackWebhookView(APIView):
         
 class CreateReviewView(APIView):
 
+    @extend_schema(request=ReviewSerializer, responses={201: ReviewSerializer})
     @method_decorator(ratelimit(key="user", rate="10/m", method="POST", block=True))
     def post(self, request, order_id):
         try:
@@ -380,6 +404,7 @@ class CreateReviewView(APIView):
 
 class UpdateReviewView(APIView):
 
+    @extend_schema(request=ReviewSerializer, responses={200: ReviewSerializer})
     @method_decorator(ratelimit(key="user", rate="10/m", method="PATCH", block=True))
     def patch(self, request, order_id):
         try:
@@ -405,6 +430,7 @@ class UpdateReviewView(APIView):
 
 class OrderReviewDetailView(APIView):
     
+    @extend_schema(responses={200: ReviewSerializer})
     @method_decorator(ratelimit(key="user", rate="5/m", method="GET", block=True))
     def get(self, request, order_id):
         try:
@@ -422,20 +448,37 @@ class OrderReviewDetailView(APIView):
 class FoodReviewsView(APIView):
     permission_classes = []
 
+    @extend_schema(responses={200: ReviewSerializer(many=True)})
     @method_decorator(ratelimit(key="ip", rate="5/m", method="GET", block=True))
     def get(self, request, food_id):
         try:
             food = get_available_food_by_id(food_id)
         except Food.DoesNotExist:
-            return Response({"error": "Food not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Food not found"}, status=status.HTTP_404_NOT_FOUND)        
         
-        stats = get_food_review_stats(food_id)
         reviews = get_food_reviews(food_id)
+
+        rating = request.query_params.get("rating")
+        min_rating = request.query_params.get("min_rating")
+        max_rating = request.query_params.get("max_rating")
+
+        if rating:
+            reviews = reviews.filter(rating=rating)        
+        if min_rating:
+            reviews = reviews.filter(rating__gte=min_rating)        
+        if max_rating:
+            reviews = reviews.filter(rating__lte=max_rating)
+        
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        paginated_reviews = paginator.paginate_queryset(reviews, request)
+
+        stats = get_food_review_stats(food_id)
    
-        return Response({
+        return paginator.get_paginated_response({
             "id": food.id,
             "average_rating": stats["average_rating"],
             "total_reviews": stats["total_reviews"],
-            "reviews": ReviewSerializer(reviews, many=True).data
-        }, status=status.HTTP_200_OK)
+            "reviews": ReviewSerializer(paginated_reviews, many=True).data
+        })
         

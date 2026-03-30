@@ -1,6 +1,7 @@
 from celery import shared_task
-from django.core.mail import send_mail
 from food.selectors import get_order_by_id_for_email
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from food.models import Order
 from django.conf import settings
 import logging
@@ -50,21 +51,32 @@ def send_order_status_email(self, order_id, new_status):
         return
 
     try:
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key["api-key"] = settings.BREVO_API_KEY
+
+        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+            sib_api_v3_sdk.ApiClient(configuration)
+        )
         email_data = STATUS_EMAIL_MESSAGES.get(new_status)
         if not email_data:
             return
         
-        send_mail(
+        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": order.user.email, "name": order.user.username}],
+            sender={"email": "alliolaniyan1@gmail.com", "name": "OlaTech Food"},
             subject=email_data["subject"],
-            message=f"Hi {order.user.username},\n\n{email_data['message']}\n\nTotal: ₦{order.total}\n\nThank you for choosing OlaTech Food!",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[order.user.email],
-            fail_silently=False
+            html_content=f"""
+                <h2>Hi {order.user.username},</h2>
+                <p>{email_data['message']}</p>
+                <p>Order Total: ₦{order.total}</p>
+                <p>Thank you for choosing OlaTech Food!</p>
+            """
         )
 
+        api_instance.send_transac_email(send_smtp_email)
         logger.info(f"Status email sent to {order.user.email} for order {order.id} → {new_status}")
 
-    except Exception as exc:
+    except ApiException as exc:
         logger.error(f"Failed to send status email for order {order.id}: {exc} ")
         raise self.retry(exc=exc, countdown=60)
     
@@ -78,25 +90,42 @@ def send_payment_email(self, order_id, payment_status):
         return
     
     try:
-        if payment_status == "PAID":
-            subject = "Payment successful ✅"
-            message = f"Hi {order.user.username},\n\nYour payment of ₦{order.total} has been received successfully.\n\nPayment Reference: {order.payment_reference}\n\nThank you for choosing OlaTech Food!"
-        
-        else:
-            subject = "Payment failed ❌"
-            message = f"Hi {order.user.username},\n\nUnfortunately your payment for Order {order.payment_reference} failed.\n\nPlease try again or contact support.\n\nOlaTech Food"
-        
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[order.user.email],
-            fail_silently=False
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key["api-key"] = settings.BREVO_API_KEY
+
+        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+            sib_api_v3_sdk.ApiClient(configuration)
         )
 
+        if payment_status == "PAID":
+            subject = "Payment successful ✅"
+            html_content = f"""
+                <h2>Hi {order.user.username},</h2>
+                <p>Your payment of ₦{order.total} has been received successfully.</p>
+                <p>Payment Reference: <strong>{order.payment_reference}</strong></p>
+                <p>Thank you for choosing OlaTech Food!</p>
+            """
+
+        else:
+            subject = "Payment failed ❌"
+            html_content = f"""
+                <h2>Hi {order.user.username},</h2>
+                <p>Unfortunately your payment for Order {order.payment_reference} failed.</p>
+                <p>Please try again or contact support.</p>
+                <p>OlaTech Food</p>
+            """
+        
+        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(            
+            to=[{"email": order.user.email, "name": order.user.username}],
+            sender={"email": "alliolaniyan1@gmail.com", "name": "OlaTech Food"},
+            subject=subject,
+            html_content=html_content
+        )
+
+        api_instance.send_transac_email(send_smtp_email)
         logger.info(f"Payment email sent to {order.user.email} — {payment_status}")
     
-    except Exception as exc:
+    except ApiException as exc:
         logger.error(f"Failed to send payment email for order {order_id}: {exc}")
         raise self.retry(exc=exc, countdown=60)
 

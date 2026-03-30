@@ -145,6 +145,8 @@ CELERY_TIMEZONE = "Africa/Lagos"
 CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 
+BREVO_API_KEY = config("BREVE_API_KEY")
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

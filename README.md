@@ -36,11 +36,11 @@ The project is designed to be scalable, maintainable, and ready for integration 
 
 2. Create a virtual environment
    ```bash
-   python -m venv env
+   python -m venv venv
 
 3. Activate the virtual environment
    ```bash
-   env\Scripts\activate
+   venv\Scripts\activate
 
 5. Install dependencies
    ```bash

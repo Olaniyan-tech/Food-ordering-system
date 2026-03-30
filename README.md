@@ -409,13 +409,17 @@ http://127.0.0.1:8000/api/
 
 7. Test protected endpoints such as:
    
-   - **GET /menu/**
-   - **POST /add_to_cart/**
-   - **POST /my-orders/**
-   - **POST /remove/**
-   - **POST /cancel/**
-   - **POST /order/details/**
-   - **POST /checkout/**
+   - **GET /api/menu/**
+   - **POST /api/add_to_cart/**
+   - **GET /api/my-orders/**
+   - **POST /api/remove/**
+   - **POST /api/cancel/**
+   - **GET /api/order/<int:order_id>/details/**
+   - **PATCH /api/order/details/update/**
+   - **POST /api/order/<int:order_id>/review/**
+   - **PATCH /api/order/<int:order_id>/review/update/**
+   - **GET /api/order/<int:order_id>/review/detail/**
+   - **GET /api/foods/<int:food_id>/reviews/**
 
 ```md
 ### Cookie-based Authentication

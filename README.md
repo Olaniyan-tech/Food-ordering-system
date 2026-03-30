@@ -409,17 +409,17 @@ http://127.0.0.1:8000/api/
 
 7. Test protected endpoints such as:
    
-   - **GET /api/menu/**
-   - **POST /api/add_to_cart/**
-   - **GET /api/my-orders/**
-   - **POST /api/remove/**
-   - **POST /api/cancel/**
+   - **GET `/api/menu/`**
+   - **POST `/api/add_to_cart/`**
+   - **GET `/api/my-orders/`**
+   - **POST `/api/remove/`**
+   - **POST `/api/cancel/`**
    - **GET `/api/order/<int:order_id>/details/`**
-   - **PATCH /api/order/details/update/**
-   - **POST /api/order/<int:order_id>/review/**
-   - **PATCH /api/order/<int:order_id>/review/update/**
-   - **GET /api/order/<int:order_id>/review/detail/**
-   - **GET /api/foods/<int:food_id>/reviews/**
+   - **PATCH `/api/order/details/update/`**
+   - **POST `/api/order/<int:order_id>/review/`**
+   - **PATCH `/api/order/<int:order_id>/review/update/`**
+   - **GET `/api/order/<int:order_id>/review/detail/`**
+   - **GET `/api/foods/<int:food_id>/reviews/`**
 
 ```md
 ### Cookie-based Authentication
@@ -431,10 +431,12 @@ Access tokens are automatically sent with each request once the user is logged i
 ## 🔹 Tech Stack
 ```md
 
-- Python
-- Django
-- Django REST Framework
-- Simple JWT
+- Python ----- Programming Language
+- Django ----- Web framework for building server-side applications
+- Django REST Framework ----- API layer
+- Simple JWT ----- JWT token authentication
+- PostgreSQL ----- Database
+- django-cors-headers ----- Support frontend integration
 
 
 ## Notes
@@ -442,5 +444,4 @@ Access tokens are automatically sent with each request once the user is logged i
 - This is a backend-only project.
 - All endpoints require authentication except register and login.
 - Frontend applications (React, Vue, Mobile apps) can consume this API.
-- Future updates will include payment integration, WebSockets, and Celery background tasks.
 ```

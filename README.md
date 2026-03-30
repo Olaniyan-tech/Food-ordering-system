@@ -26,13 +26,19 @@ The project is designed to be scalable, maintainable, and ready for integration 
 
 - Automatic calculation of order totals
 
+- Payment integration and verification
+
+- Background task automation (Celery + Redis)
+
+- Reviews system
+
 
 ##  🔹 Installation
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/Olaniyan-tech/ToDo-API.git]
-   cd ToDo-API
+   git clone https://github.com/Olaniyan-tech/Food-ordering-system-API.git
+   cd Food-ordering-system-API
 
 2. Create a virtual environment
    ```bash

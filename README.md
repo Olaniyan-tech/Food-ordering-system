@@ -79,12 +79,12 @@ The project is designed to be scalable, maintainable, and ready for integration 
 | `/api/my-orders/` | GET | Lists all orders of the logged-in user |
 | `/api/remove/` | POST | Decrease or delete pending items from cart|
 | `/api/cancel/` | DELETE | Cancel all items in the pending cart |
-| `/api/order/details/` | PATCH | Update order delivery details (address & phone) |
+| `/api/order/details/update/` | PATCH | Update order delivery details (address & phone) |
 | `/api/checkout/` | POST | Checkout current cart, finalize order |
-| `/api/order/<int:order_id>/` | GET | Check the details of the current order |
+| `/api/order/<int:order_id>/details/` | GET | Check the details of the current order |
 | `/api/order/<int:order_id>/pay/` | POST | Initialize payment for the checked out order | 
 | `/api/order/verify/<str:reference>/` | GET | Verify the payment for the order | 
-| `/api/webhook/paystack` | POST | Update the status of the payment |
+| `/api/webhook/paystack/` | POST | Update the status of the payment |
 | `/api/order/<int:order_id>/review/` | POST | Submit reviews for completed orders |
 | `/api/order/<int:order_id>/review/update/` | PATCH | Update order reviews |
 | `/api/order/<int:order_id>/review/detail/` | GET | Get a detail of a particular review |
@@ -414,7 +414,7 @@ http://127.0.0.1:8000/api/
    - **GET /api/my-orders/**
    - **POST /api/remove/**
    - **POST /api/cancel/**
-   - **GET /api/order/<int:order_id>/details/**
+   - **GET `/api/order/<int:order_id>/details/`**
    - **PATCH /api/order/details/update/**
    - **POST /api/order/<int:order_id>/review/**
    - **PATCH /api/order/<int:order_id>/review/update/**

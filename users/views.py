@@ -61,7 +61,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
                 key='access_token',
                 value=response_data['access'],
                 httponly=True,
-                samesite='Lax' if DEBUG else 'Strict',
+                samesite='Lax' if DEBUG else 'None',
                 secure=not DEBUG,
                 max_age=30*60, #30 minutes
                 path='/'
@@ -71,7 +71,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
                 key='refresh_token',
                 value=response_data['refresh'],
                 httponly=True,
-                samesite='Lax' if DEBUG else 'Strict',
+                samesite='Lax' if DEBUG else 'None',
                 secure=not DEBUG,
                 max_age=7*24*60*60, # 7 days
                 path='/'
@@ -102,7 +102,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                 key='access_token',
                 value=new_access,
                 httponly=True,
-                samesite='Lax' if DEBUG else 'Strict',
+                samesite='Lax' if DEBUG else 'None',
                 secure=not DEBUG,
                 max_age=30*60,
                 path='/'

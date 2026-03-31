@@ -21,8 +21,6 @@ class RegisterView(APIView):
 
     @extend_schema(request=RegisterSerializer, responses={201: RegisterSerializer})
     def post(self, request):
-        logger.info(f"Incoming registration request: {request.data}")
-
         try:
             serializer = RegisterSerializer(data=request.data)
             if serializer.is_valid():

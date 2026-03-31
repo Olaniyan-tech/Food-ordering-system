@@ -3,13 +3,7 @@ from django.db.models import Avg, Count
 from django.core.cache import cache
 
 def get_available_foods():
-    foods = cache.get("available_foods")
-
-    if foods is None:
-        foods = list(Food.objects.filter(available=True))
-        cache.set("available_foods", foods, timeout=300)
-
-    return foods
+    return Food.objects.filter(available=True)
 
 def get_available_food_by_id(food_id):
     return Food.objects.get(id=food_id, available=True)
@@ -53,17 +47,9 @@ def get_order_review(order):
         return None
 
 def get_food_reviews(food_id):
-    cache_key = f"food_reviews_{food_id}"
-    reviews = cache.get(cache_key)
-
-    if reviews is None:
-        reviews = list(Review.objects.filter(
+    return Review.objects.filter(
             order__items__food__id=food_id
-        ).select_related("user").order_by("-created_at"))
-
-        cache.set(cache_key, reviews, timeout=300)
-    
-    return reviews
+        ).select_related("user").order_by("-created_at")
 
 
 def get_food_review_stats(food_id):
@@ -80,7 +66,7 @@ def get_food_review_stats(food_id):
 
         stats = {
             "average_rating": round(result["average_rating"] or 0, 1),
-            "total_reviews": result["total_reviews"]
+            "total_reviews": result["total_reviews"] or 0
         }
         cache.set(cache_key, stats, timeout=300)
     

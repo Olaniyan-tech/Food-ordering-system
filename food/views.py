@@ -46,6 +46,7 @@ from food.selectors import (
 from food.filters import FoodFilter, OrderFilter
 from rest_framework.pagination import PageNumberPagination
 from food.permissions import IsStaffOrReadOnly, IsOrderOwner, IsStaff
+from rest_framework.permissions import AllowAny
 from django.core.exceptions import ValidationError
 from drf_spectacular.utils import extend_schema
 import logging
@@ -444,7 +445,7 @@ class OrderReviewDetailView(APIView):
 
         
 class FoodReviewsView(APIView):
-    permission_classes = []
+    permission_classes = [AllowAny]
 
     @extend_schema(responses={200: ReviewSerializer(many=True)})
     @method_decorator(ratelimit(key="ip", rate="5/m", method="GET", block=True))
@@ -460,23 +461,31 @@ class FoodReviewsView(APIView):
         min_rating = request.query_params.get("min_rating")
         max_rating = request.query_params.get("max_rating")
 
-        if rating:
-            reviews = reviews.filter(rating=rating)        
-        if min_rating:
-            reviews = reviews.filter(rating__gte=min_rating)        
-        if max_rating:
-            reviews = reviews.filter(rating__lte=max_rating)
+        try:
+            if rating:
+                reviews = reviews.filter(rating=int(rating))        
+            if min_rating:
+                reviews = reviews.filter(rating__gte=int(min_rating))        
+            if max_rating:
+                reviews = reviews.filter(rating__lte=int(max_rating))
+        
+        except ValueError:
+            return Response({"error": "Invalid rating value"}, status=status.HTTP_400_BAD_REQUEST)
         
         paginator = PageNumberPagination()
         paginator.page_size = 10
         paginated_reviews = paginator.paginate_queryset(reviews, request)
 
         stats = get_food_review_stats(food_id)
-   
-        return paginator.get_paginated_response({
+
+        paginated_data = paginator.get_paginated_response(
+            ReviewSerializer(paginated_reviews, many=True).data
+        ).data
+
+        return Response({
             "id": food.id,
             "average_rating": stats["average_rating"],
             "total_reviews": stats["total_reviews"],
-            "reviews": ReviewSerializer(paginated_reviews, many=True).data
+            "reviews": paginated_data
         })
-        
+                

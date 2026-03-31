@@ -5,9 +5,8 @@ from .serializers import RegisterSerializer
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken, AuthenticationFailed
 from drf_spectacular.utils import extend_schema
 import logging
 from django.conf import settings
@@ -79,6 +78,8 @@ class CookieTokenObtainPairView(TokenObtainPairView):
             return response
         
         except InvalidToken:
+            return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+        except AuthenticationFailed:
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             logger.error(f"Login error: {str(e)}")

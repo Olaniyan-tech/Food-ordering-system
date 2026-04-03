@@ -1,0 +1,40 @@
+import uuid
+from django.utils.text import slugify
+from django.db import IntegrityError, transaction
+
+
+def save_with_unique_slug(instance, base_text, slug_field="slug", attempts=1):
+    model_class = instance.__class__
+
+    if not getattr(instance, slug_field):
+        base_slug = slugify(base_text) or "untitled"
+
+        if attempts == 1:
+            existing_slugs = set(
+                model_class.objects.filter(
+                    **{f"{slug_field}__startswith": base_slug}
+                ).exclude(pk=instance.pk)
+                .values_list(slug_field, flat=True)
+            )
+
+            slug = base_slug
+            counter = 1
+            while slug in existing_slugs:
+                slug = f"{base_slug}-{counter}"
+                counter +=1
+        
+        else:
+            slug = f"{slugify(base_text)}-{uuid.uuid4().hex[:4]}"
+
+        setattr(instance, slug_field, slug)
+    
+    try:
+        with transaction.atomic():
+            instance.save()
+    
+    except IntegrityError:
+        if attempts > 3:
+            raise
+
+        setattr(instance, slug_field, None)
+        return save_with_unique_slug(instance, base_text, slug_field, attempts + 1)

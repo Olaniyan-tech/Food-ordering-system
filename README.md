@@ -29,6 +29,7 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 - Leave reviews for orders and vendors
 
 
+
 ## 🔹 Vendor Features
 
 - Vendor registration and onboarding
@@ -48,6 +49,7 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 - View customer reviews and ratings
 
 
+
 ## 🔹 Admin Features
 
 - Approve or reject vendor registrations
@@ -59,11 +61,13 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 - Handle disputes and reports
 
 
+
 ## 🔹 Payment & Orders
 
 - Automatic calculation of order totals
 
 - Payment integration and verification
+
 
 
 ## 🔹 System & Architecture Features

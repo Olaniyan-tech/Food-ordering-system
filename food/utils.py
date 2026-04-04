@@ -1,7 +1,9 @@
 import uuid
 from django.utils.text import slugify
 from django.db import IntegrityError, transaction
+import logging
 
+logger = logging.getLogger(__name__)
 
 def save_with_unique_slug(instance, base_text, slug_field="slug", attempts=1):
     model_class = instance.__class__
@@ -25,6 +27,10 @@ def save_with_unique_slug(instance, base_text, slug_field="slug", attempts=1):
         
         else:
             slug = f"{slugify(base_text)}-{uuid.uuid4().hex[:4]}"
+            logger.warning(
+                f"Slug collision exceeded 100 attempts for '{base_text}' "
+                f"- using UUID fallback: {slug}"
+            )
 
         setattr(instance, slug_field, slug)
     

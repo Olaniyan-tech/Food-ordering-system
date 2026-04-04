@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.utils import timezone
-from food.models import Order, OrderStatusHistory
+from food.models import Food, Order, OrderStatusHistory
 from food.tasks import send_order_status_email, send_payment_email
 from django.core.exceptions import ValidationError
 import logging
@@ -59,10 +59,11 @@ def finalize_order(order, user=None):
         raise ValidationError("Cannot checkout an empty cart")
     
     for item in order.items.select_related("food"):
-        if item.food.stock < item.quantity:
-            raise ValidationError(f"{item.food.name} is out of stock")
-        item.food.stock -= item.quantity
-        item.food.save(update_fields=["stock", "updated_at"])
+        food = Food.objects.select_for_update().get(id=item.food_id)
+        if food.stock < item.quantity:
+            raise ValidationError(f"{food.name} is out of stock")
+        food.stock -= item.quantity
+        food.save(update_fields=["stock", "updated_at"])
         
     return update_order_status(order, "CONFIRMED", changed_by=user)
 

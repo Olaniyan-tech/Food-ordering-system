@@ -47,7 +47,7 @@ class Vendor(models.Model):
         return self.business_name
 
 class Food(models.Model):
-    vendor = models.ForeignKey(Vendor, related_name="foods", null=True, on_delete=models.CASCADE)
+    vendor = models.ForeignKey(Vendor, related_name="foods", null=True, on_delete=models.SET_NULL)
     category = models.ForeignKey(Category, related_name="foods", null=True, on_delete=models.SET_NULL)
     name = models.CharField(max_length=70, db_index=True)
     slug = models.SlugField(max_length=100, unique=True, blank=True)
@@ -60,6 +60,8 @@ class Food(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        if self.stock == 0:
+            self.available = False
         if not self.slug:
             return save_with_unique_slug(self, self.name)
         super().save(*args, **kwargs)
@@ -162,7 +164,7 @@ class OrderItem(models.Model):
 
 
 class Review(models.Model):    
-    order = models.OneToOneField(Order, on_delete=models.SET_NULL, related_name="review", null=True)
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="review", null=True)
     vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, related_name="reviews", null=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reviews")
     rating = models.PositiveSmallIntegerField(
@@ -174,8 +176,9 @@ class Review(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        if self.vendor != self.order.vendor:
-            raise ValidationError("Review vendor must match order vendor")
+        if self.order and self.vendor != self.order.vendor:
+            raise ValidationError("Review vendor must match order vendor.")
 
     def __str__(self):
-        return f"Review by {self.user.username} for Order {self.order.id}" 
+        order_id = self.order_id if self.order_id else "unknown"
+        return f"Review by {self.user.username} for Order {order_id}" 

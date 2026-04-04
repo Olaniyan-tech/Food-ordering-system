@@ -46,7 +46,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         )
 
 
-class VendorUpdateProfileSerializer(serializers.ModelSerializer):
+class VendorProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
         fields = (
@@ -89,23 +89,30 @@ class VendorDashboardSerializer(serializers.ModelSerializer):
             "country",
             "is_active",
             "is_approved",
-            "total_foods",
-            "total_orders",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("slug", "is_active", "created_at", "updated_at")
 
-    @extend_schema_field(serializers.IntegerField())
-    def get_total_foods(self, obj):
-        return obj.foods.count()
-
-    @extend_schema_field(serializers.IntegerField())
-    def get_total_orders(self, obj):
-        return obj.orders.count()
 
     def validate_phone(self, value):
         return validate_vendor_phone(value, self.instance)
+
+
+class AdminVendorListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vendor
+        fields = (
+            "id",
+            "business_name",
+            "slug",
+            "logo",
+            "city",
+            "state",
+            "is_active",      
+            "is_approved",    
+            "created_at",       
+        )
 
 
 class FoodSerializer(serializers.ModelSerializer):

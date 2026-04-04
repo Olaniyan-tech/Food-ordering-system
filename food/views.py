@@ -11,26 +11,42 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import generics
 from rest_framework import status
-from food.models import Food, Order
+from food.models import Food, Order, Vendor
 from .serializers import (
-    FoodSerializer, 
+    FoodSerializer,
+    FoodWriteSerializer, 
     OrderSerializer, 
     AddToCartSerializer, 
     OrderDeliveryDetailSerializer, 
-    ReviewSerializer
+    ReviewSerializer,
+    VendorRegistrationSerializer,
+    VendorProfileSerializer,
+    VendorProfileUpdateSerializer,
+    VendorDashboardSerializer,
+    AdminVendorListSerializer
 )
 from food.services.cart_service import add_item_to_cart, remove_item_from_cart
 from food.services.order_service import ( 
+    ADMIN_TRANSITION_MAP,
+    VENDOR_TRANSITION_MAP,
     cancel_order, 
     finalize_order,
-    mark_preparing, 
-    mark_ready, 
-    mark_out_for_delivery, 
-    mark_delivered,
     update_payment_status
 )    
 from food.services.payment_service import initialize_payment, verify_payment
 from food.services.review_service import create_review
+from food.services.vendor_services import (
+    register_vendor,
+    update_vendor_profile,
+    approve_vendor,
+    reject_vendor,
+    activate_vendor,
+    deactivate_vendor,
+    create_vendor_food,
+    update_vendor_food,
+    delete_vendor_food,
+    toggle_vendor_food_availability,
+)
 from food.selectors import (
     get_available_foods,
     get_available_food_by_id,
@@ -41,13 +57,33 @@ from food.selectors import (
     get_order_by_reference,
     get_order_review, 
     get_food_reviews,
-    get_food_review_stats
+    get_food_reviews_stats,
+    get_all_vendors,
+    get_vendor_by_slug,
+    get_vendor_by_id,
+    get_pending_vendors,
+    get_vendor_foods,
+    get_vendor_orders,
+    get_vendor_order_by_id,
+    get_vendor_reviews,
+    get_vendor_reviews_stats,
+    get_vendor_dashboard_stats,
+    get_food_by_id
 )
 from food.filters import FoodFilter, OrderFilter
 from rest_framework.pagination import PageNumberPagination
-from food.permissions import IsStaffOrReadOnly, IsOrderOwner, IsStaff
-from rest_framework.permissions import AllowAny
+from food.permissions import (
+    IsStaffOrReadOnly, 
+    IsOrderOwner, 
+    IsStaff, 
+    IsVendor,
+    IsApprovedVendor,
+    IsVendorOwner,
+    IsStaffOrVendorOwner
+)
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
 import logging
 
@@ -56,16 +92,44 @@ logger = logging.getLogger(__name__)
 
 class AllFoodView(generics.ListAPIView):
     serializer_class = FoodSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [AllowAny]
     filterset_class = FoodFilter
-    search_fields = ["name", "descriptions"]
+    search_fields = ["name", "category__name", "vendor__business_name"]
     ordering_fields = ["price", "name"]
-    ordering = ["-created"]
+    ordering = ["-created_at"]
 
     def get_queryset(self):
+        vendor_slug = self.request.query_params.get("vendor")
+        if vendor_slug:
+            try:
+                vendor = get_vendor_by_slug(vendor_slug)
+            except Vendor.DoesNotExist:
+                raise NotFound("Vendor not found")
+            return get_available_foods(vendor=vendor)
         return get_available_foods()
     
+    def get_serializer_context(self):
+        return {"request": self.request}
+
     @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class FoodDetailView(generics.RetrieveAPIView):
+    serializer_class = FoodSerializer
+    permission_classes = [AllowAny]
+
+    def get_serializer_context(self):
+        return {"request": self.request}
+
+    def get_object(self):
+        food_id = self.kwargs["food_id"]
+        try:
+            return get_available_food_by_id(food_id)
+        except Food.DoesNotExist:
+            raise NotFound("Food not found")
+
+    @method_decorator(ratelimit(key="ip", rate="30/m", method="GET", block=True))
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
         
@@ -73,8 +137,8 @@ class AllFoodView(generics.ListAPIView):
 class AllOrdersView(generics.ListAPIView):
     serializer_class = OrderSerializer
     filterset_class = OrderFilter
-    ordering_fields = ["date_created", "total"]
-    ordering = ["-date_created"]
+    ordering_fields = ["created_at", "total"]
+    ordering = ["-created_at"]
     
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -105,7 +169,9 @@ class AddToCartView(APIView):
         try:
             order = add_item_to_cart(request.user, food, quantity)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
         order = get_order_by_id(order.id)
     
@@ -122,12 +188,16 @@ class RemoveFromCartView(APIView):
         action = request.data.get("action")  # 'decrease' or 'delete'
 
         if not action:
-            return Response({"error": "Action is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Action is required"},
+                 status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             order = remove_item_from_cart(user=user, item_id=item_id, action=action)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)       
+            return Response({"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )       
 
         order = get_order_by_id(order.id)
         serializer = OrderSerializer(order)
@@ -137,8 +207,8 @@ class RemoveFromCartView(APIView):
 class CancelOrderView(APIView):
 
     @extend_schema(responses={200: None})
-    @method_decorator(ratelimit(key="user", rate="5/m", method="DELETE", block=True))
-    def delete(self, request):
+    @method_decorator(ratelimit(key="user", rate="5/m", method="POST", block=True))
+    def post(self, request):
         order = get_pending_order(request.user)
         if not order:
             return Response({"error": "No Order to cancel"}, status=status.HTTP_404_NOT_FOUND)
@@ -146,10 +216,11 @@ class CancelOrderView(APIView):
         try:
             cancel_order(order, user=request.user)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response({"message" : "Order cancelled successfully"}, status=status.HTTP_200_OK)
-
 
    
 class UpdateOrderDetailView(APIView):
@@ -178,7 +249,9 @@ class CheckOutView(APIView):
 
         order = get_pending_order(user=user)
         if not order:
-            return Response({"error": "No pending order to checkout"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No pending order to checkout"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         serializer = OrderDeliveryDetailSerializer(
             instance=order,
@@ -207,7 +280,8 @@ class CheckOutView(APIView):
             "phone" : order.phone,
             "status" : order.status,
             "total" : order.total}, 
-            status=status.HTTP_200_OK)
+            status=status.HTTP_200_OK
+        )
 
 
 class OrderDetailView(generics.RetrieveAPIView):
@@ -227,16 +301,8 @@ class OrderDetailView(generics.RetrieveAPIView):
         return order
 
 
-STATUS_TRANSITION_MAP = {
-    "PREPARING": mark_preparing,
-    "READY": mark_ready,
-    "OUT FOR DELIVERY": mark_out_for_delivery,
-    "DELIVERED": mark_delivered
-}
-
-
 class OrderStatusUpdateView(APIView):
-    permission_classes = [IsStaff]
+    permission_classes = [IsStaff | IsApprovedVendor]
 
     @extend_schema(responses={200: OrderSerializer})
     @method_decorator(ratelimit(key="user", rate="30/m", method="PATCH", block=True))
@@ -244,25 +310,40 @@ class OrderStatusUpdateView(APIView):
         try:
             order = get_order_by_id(order_id)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not request.user.is_staff:
+            if order.vendor != request.user.vendor:
+                return Response(
+                    {"error": "You can only update your own orders."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         requested_status = request.data.get("status", "").strip().upper()
         if not requested_status:
-            return Response({"error": "'status' field is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "'status' field is required."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        handler = STATUS_TRANSITION_MAP.get(requested_status)
+        transition_map = ADMIN_TRANSITION_MAP if request.user.is_staff else VENDOR_TRANSITION_MAP
+        handler = transition_map.get(requested_status)
         if not handler:
             return Response({"error": f"'{requested_status}' is not a valid transition.",
-                "valid_status": list(STATUS_TRANSITION_MAP.keys())},
-                status=status.HTTP_400_BAD_REQUEST)
+                "valid_status": list(transition_map.keys())},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             updated_order = handler(order, user=request.user)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_409_CONFLICT)
+            return Response({"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_409_CONFLICT
+            )
         
-        return Response({"id": str(updated_order.id), "status": updated_order.status}, 
-            status=status.HTTP_200_OK)
+        return Response({"id": str(updated_order.id), 
+            "status": updated_order.status}, 
+            status=status.HTTP_200_OK 
+        )
     
 
 class InitializePaymentView(APIView):
@@ -273,12 +354,14 @@ class InitializePaymentView(APIView):
         try:
             order = get_user_order_by_id(order_id, request.user)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
         
         try:
             authorization_url, reference = initialize_payment(order)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_409_CONFLICT)
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+                status=status.HTTP_409_CONFLICT
+            )
         
         return Response({
             "authorization_url": authorization_url,
@@ -294,12 +377,14 @@ class VerifyPaymentView(APIView):
         try:
             order = get_order_by_reference(reference, request.user)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
         
         try:
             payment_data = verify_payment(reference)
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
                 
         if payment_data["status"] == PAYSTACK_SUCCESS_STATUS:
             update_payment_status(order, "PAID")
@@ -309,15 +394,15 @@ class VerifyPaymentView(APIView):
                 "message": "Payment successful",
                 "order_id": order.id,
                 "payment_status": order.payment_status,
-                "amount_paid": payment_data["amount"] / 100
-            }, status=status.HTTP_200_OK)
-    
+                "amount_paid": payment_data["amount"] / 100}, 
+                status=status.HTTP_200_OK
+            )    
 
         update_payment_status(order, 'FAILED')
         logger.info(f"Payment failed for order {order.id} by {request.user.username}")
 
         return Response({
-            "error": "Payment failed",
+            "error": "Payment failed!",
             "payment_status": order.payment_status
         }, status=status.HTTP_402_PAYMENT_REQUIRED)
         
@@ -347,7 +432,7 @@ class PayStackWebhookView(APIView):
             event = payload.get("event")
             reference = payload.get("data", {}).get("reference")
         except Exception:
-            return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid payload!"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not reference:
             logger.warning("Webhook received with no reference")
@@ -377,12 +462,14 @@ class CreateReviewView(APIView):
         try:
             order = get_user_order_by_id(order_id, request.user)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
     
         serializer = ReviewSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
             review = create_review(
@@ -391,14 +478,17 @@ class CreateReviewView(APIView):
                 validated_data=serializer.validated_data
             )
         except ValidationError as e:
-            return Response({"error": e.messages[0] if e.messages else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         logger.info(f"User {request.user.username} reviewed Order {order_id}")
 
         return Response({
-            "message": "Review submitted successfully",
-            "data": ReviewSerializer(review).data
-        }, status=status.HTTP_201_CREATED)
+            "message": "Review submitted successfully.",
+            "data": ReviewSerializer(review).data}, 
+            status=status.HTTP_201_CREATED
+        )
 
 
 class UpdateReviewView(APIView):
@@ -409,23 +499,31 @@ class UpdateReviewView(APIView):
         try:
             order = get_user_order_by_id(order_id, request.user)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
 
         review = get_order_review(order)
         if not review:
-            return Response({"error": "No review found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No review found!"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = ReviewSerializer(review, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         serializer.save()
+        food_ids = order.items.values_list("food__id", flat=True)
+        for food_id in food_ids:
+            cache.delete(f"food_reviews_{food_id}")
+            cache.delete(f"food_review_stats_{food_id}")
+        if order.vendor_id:
+            cache.delete(f"vendor_review_stats_{order.vendor_id}")
         logger.info(f"User {request.user.username} updated review for Order {order_id}")
 
         return Response({
-            "message": "Review updated successfully",
-            "data": serializer.data
-        }, status=status.HTTP_200_OK)
+            "message": "Review updated successfully.",
+            "data": serializer.data}, 
+            status=status.HTTP_200_OK
+        )
+
 
 class OrderReviewDetailView(APIView):
     
@@ -435,11 +533,11 @@ class OrderReviewDetailView(APIView):
         try:
             order = get_user_order_by_id(order_id, request.user)
         except Order.DoesNotExist:
-            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Order not found!"}, status=status.HTTP_404_NOT_FOUND)
         
         review = get_order_review(order)
         if not review:
-            return Response({"error": "No review found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No review found!"}, status=status.HTTP_404_NOT_FOUND)
         
         return Response(ReviewSerializer(review).data, status=status.HTTP_200_OK)
 
@@ -470,13 +568,13 @@ class FoodReviewsView(APIView):
                 reviews = reviews.filter(rating__lte=int(max_rating))
         
         except ValueError:
-            return Response({"error": "Invalid rating value"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid rating value!"}, status=status.HTTP_400_BAD_REQUEST)
         
         paginator = PageNumberPagination()
         paginator.page_size = 10
         paginated_reviews = paginator.paginate_queryset(reviews, request)
 
-        stats = get_food_review_stats(food_id)
+        stats = get_food_reviews_stats(food_id)
 
         paginated_data = paginator.get_paginated_response(
             ReviewSerializer(paginated_reviews, many=True).data
@@ -487,5 +585,596 @@ class FoodReviewsView(APIView):
             "average_rating": stats["average_rating"],
             "total_reviews": stats["total_reviews"],
             "reviews": paginated_data
-        })
+        }, status=status.HTTP_200_OK)
                 
+
+class VendorListView(generics.ListAPIView):
+    serializer_class = VendorProfileSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return get_all_vendors()
+    
+    def get_serializer_context(self):
+        return {"request": self.request}
+    
+    @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class VendorDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={200: VendorProfileSerializer})
+    @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True))
+    def get(self, request, slug):
+        try:
+            vendor = get_vendor_by_slug(slug)
+        except Vendor.DoesNotExist:
+            return Response({"error": "Vendor not found!"}, status=status.HTTP_404_NOT_FOUND)
+        
+        stats = get_vendor_reviews_stats(vendor.id)
+
+        serializer = VendorProfileSerializer(
+            vendor,
+            context={"request": request}
+        )
+
+        return Response({
+            **serializer.data,
+            "average_rating": stats["average_rating"],
+            "total_reviews": stats["total_reviews"]}, 
+            status=status.HTTP_200_OK
+        )
+
+
+class VendorFoodListView(generics.ListAPIView):
+    serializer_class = FoodSerializer
+    permission_classes = [AllowAny]
+    filterset_class = FoodFilter
+    search_fields = ["name", "category__name"]
+    ordering_fields = ["price", "name"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        slug = self.kwargs["slug"]
+        try:
+            vendor = get_vendor_by_slug(slug)
+        except Vendor.DoesNotExist:
+            raise NotFound("Vendor not found!")
+        return get_available_foods(vendor=vendor)
+
+    def get_serializer_context(self):
+        return {"request": self.request}
+    
+    @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+
+class VendorReviewsView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={200: ReviewSerializer(many=True)})
+    @method_decorator(ratelimit(key="ip", rate="30/m", method="GET", block=True))
+    def get(self, request, slug):
+        try:
+            vendor = get_vendor_by_slug(slug)
+        except Vendor.DoesNotExist:
+            return Response(
+                {"error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        reviews = get_vendor_reviews(vendor)
+
+        rating = request.query_params.get("rating")
+        min_rating = request.query_params.get("min_rating")
+        max_rating = request.query_params.get("max_rating")
+
+        try:
+            if rating:
+                reviews = reviews.filter(rating=int(rating))        
+            if min_rating:
+                reviews = reviews.filter(rating__gte=int(min_rating))        
+            if max_rating:
+                reviews = reviews.filter(rating__lte=int(max_rating))
+
+        except ValueError:
+            return Response({"error": "Invalid rating value!"}, status=status.HTTP_400_BAD_REQUEST)
+    
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        paginated_reviews = paginator.paginate_queryset(reviews, request)
+
+        stats = get_vendor_reviews_stats(vendor.id)
+
+        paginated_data = paginator.get_paginated_response(
+            ReviewSerializer(paginated_reviews, many=True).data
+        ).data
+
+        return Response({
+            "average_rating": stats["average_rating"],
+            "total_reviews": stats["total_reviews"],
+            "reviews": paginated_data}, 
+            status=status.HTTP_200_OK
+        )
+
+
+class VendorRegistrationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=VendorRegistrationSerializer, responses={201: VendorProfileSerializer})
+    def post(self, request):
+        serializer = VendorRegistrationSerializer(
+            data=request.data, 
+            context={"request": request}
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            vendor = register_vendor(
+                user=request.user,
+                validated_data=serializer.validated_data
+            )
+        except ValidationError as e:
+            return Response({
+                "error": e.messages[0] if e.messages else str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"New vendor application: {vendor.business_name} by {request.user.username}")
+
+        return Response({
+            "message": "Vendor application submitted successfully. Awaiting admin approval.",
+            "data": VendorProfileSerializer(vendor, context={"request": request}).data}, 
+            status=status.HTTP_201_CREATED
+        )
+
+
+class VendorDashboardView(APIView):
+    permission_classes = [IsApprovedVendor]
+
+    @extend_schema(responses={200: VendorDashboardSerializer})
+    @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
+    def get(self, request):
+        vendor = request.user.vendor
+
+        serializer = VendorDashboardSerializer(
+            vendor,
+            context={"request": request}
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class VendorDashboardStatsView(APIView):
+    permission_classes = [IsApprovedVendor]
+
+    @extend_schema(responses={200: VendorDashboardSerializer})
+    @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
+    def get(self, request):
+        vendor = request.user.vendor
+
+        stats = get_vendor_dashboard_stats(vendor)
+
+        return Response(stats, status=status.HTTP_200_OK)
+
+
+class VendorProfileUpdateView(APIView):
+    permission_classes = [IsApprovedVendor]
+
+    @extend_schema(request=VendorProfileUpdateSerializer, responses={200: VendorDashboardSerializer})
+    @method_decorator(ratelimit(key="user", rate="10/m", method="PATCH", block=True))
+    def patch(self, request):
+        vendor = request.user.vendor
+
+        serializer = VendorProfileUpdateSerializer(
+            vendor,
+            data=request.data,
+            partial=True,
+            context={"request": request}
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            vendor = update_vendor_profile(
+                vendor=vendor,
+                validated_data=serializer.validated_data
+            )
+        except ValidationError as e:
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+        logger.info(f"Vendor {vendor.business_name} updated their profile")
+
+        return Response({
+            "message": "Profile updated successfully",
+            "data": VendorDashboardSerializer(vendor, context={"request":request}).data}, 
+            status=status.HTTP_200_OK
+        )
+
+
+class VendorFoodCreateView(APIView):
+    permission_classes = [IsApprovedVendor]
+
+    @extend_schema(request=FoodWriteSerializer, responses={201: FoodSerializer})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="POST", block=True))
+    def post(self, request):
+        vendor = request.user.vendor
+        serializer = FoodWriteSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            food = create_vendor_food(
+                vendor=vendor,
+                validated_data=serializer.validated_data
+            )
+        except ValidationError as e:
+            return Response({"error": e.messages[0] if e.messages else str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+        logger.info(f"Vendor {vendor.business_name} created food: {food.name}")
+
+        return Response({
+            "message": f"{food.name} created successfully.",
+            "data": FoodSerializer(food, context={"request": request}).data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class VendorFoodsView(generics.ListAPIView):
+    serializer_class = FoodSerializer
+    permission_classes = [IsApprovedVendor]
+    filterset_class = FoodFilter
+    ordering_fields = ["price", "name"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        return get_vendor_foods(self.request.user.vendor)
+
+    def get_serializer_context(self):
+        return {"request": self.request}
+    
+    @method_decorator(ratelimit(key="ip", rate="60/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class VendorFoodDetailView(APIView):
+    permission_classes = [IsApprovedVendor, IsVendorOwner]
+
+    # helper method — reused by patch() and delete()
+    # avoids repeating the same try/except in both methods
+    def get_food(self, request, food_id):
+        try:
+            food = get_food_by_id(food_id)
+        except Food.DoesNotExist:
+            raise NotFound("Food not found!")
+
+        self.check_object_permissions(request, food)
+        return food
+    
+    def get(self, request, food_id):
+        food = self.get_food(request, food_id)
+        return Response(
+            FoodSerializer(food, context={"request": request}).data, 
+            status=status.HTTP_200_OK
+        )
+    
+    def patch(self, request, food_id):
+        food = self.get_food(request, food_id)
+        serializer = FoodWriteSerializer(
+            food,
+            data=request.data,
+            partial=True,
+            context={"request": request}
+        )
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            food = update_vendor_food(
+                food,
+                validated_data=serializer.validated_data
+            )
+        except ValidationError as e:
+            return Response({"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"Vendor {request.user.vendor.business_name} updated food: {food.name}")
+
+        return Response({
+            "message": "Food updated successfully.",
+            "data": FoodSerializer(food, context={"request": request}).data}, 
+            status=status.HTTP_200_OK
+        )
+
+    def delete(self, request, food_id):
+        food = self.get_food(request, food_id)
+        delete_vendor_food(food)
+
+        logger.info(f"Vendor {request.user.vendor.business_name} deleted food: {food.name}")
+
+        return Response({
+            "message": f"{food.name} deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+
+class VendorFoodToggleAvailabilityView(APIView):
+    # Vendor marks food as available/unavailable
+    # Separate endpoint — single purpose, clear intent
+    # e.g. "Zinger Burger is sold out for today"
+    permission_classes = [IsApprovedVendor, IsVendorOwner]
+
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
+    def patch(self, request, food_id):
+        try:
+            food = get_food_by_id(food_id)
+        except Food.DoesNotExist:
+            return Response(
+                {"error": "Food not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        self.check_object_permissions(request, food)
+    
+        food = toggle_vendor_food_availability(food)
+
+        logger.info(
+            f"{food.name} is now {'available' if food.available else 'unavailable'}"
+            f" - Vendor {request.user.vendor.business_name}"
+        )
+        
+        return Response({
+            "message": f"{food.name} is now {'available' if food.available else 'unavailable'}",
+            "available": food.available}, 
+            status=status.HTTP_200_OK
+        )
+
+class VendorOrderListView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsApprovedVendor]
+    filterset_class = OrderFilter
+    ordering_fields = ["created_at", "total"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Order.objects.none()
+        return get_vendor_orders(self.request.user.vendor)
+    
+    @method_decorator(ratelimit(key="user", rate="60/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class VendorOrderDetailView(APIView):
+    permission_classes = [IsApprovedVendor]
+
+    @extend_schema(responses={200: OrderSerializer})
+    @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
+    def get(self, request, order_id):
+        vendor = request.user.vendor
+        try:
+            order = get_vendor_order_by_id(
+                vendor=vendor,
+                order_id=order_id,
+            )
+        except Order.DoesNotExist:
+            return Response({
+                "error": 'Order not found!'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            OrderSerializer(order, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )
+
+class AdminVendorListView(generics.ListAPIView):
+    serializer_class = AdminVendorListSerializer
+    permission_classes = [IsStaff]
+    ordering_fields = ["created_at", "business_name"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Vendor.objects.none()
+        
+        status_filter = self.request.query_params.get("status")
+
+        if status_filter == "pending":
+            return get_pending_vendors()
+        if status_filter == "active":
+            return get_all_vendors()
+        
+        return Vendor.objects.all()
+    
+    def get_serializer_context(self):
+        return {"request": self.request}
+        
+    @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminVendorDetailView(APIView):
+    permission_classes = [IsStaff]
+
+    @extend_schema(responses={200: VendorDashboardSerializer})
+    @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
+    def get(self, request, vendor_id):
+        try:
+            vendor = get_vendor_by_id(vendor_id)
+        except Vendor.DoesNotExist:
+            return Response(
+                {"error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        stats = get_vendor_reviews_stats(vendor.id)
+        dashboard_stats = get_vendor_dashboard_stats(vendor)
+
+        return Response({
+            **VendorDashboardSerializer(vendor, context={"request": request}).data,
+            "review_stats": stats,
+            "dashboard_stats": dashboard_stats},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminApproveVendorView(APIView):
+    permission_classes = [IsStaff]
+
+    @extend_schema(responses={200: VendorDashboardSerializer})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
+
+    def patch(self, request, vendor_id):
+        try:
+            vendor = get_vendor_by_id(vendor_id)
+        except Vendor.DoesNotExist:
+                return Response({
+                    "error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            vendor = approve_vendor(
+                vendor=vendor,
+                approved_by=request.user
+            )
+        except ValidationError as e:
+            return Response({
+                "error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(
+            f"Admin {request.user.username} approved vendor: {vendor.business_name}"
+        )
+
+        return Response({
+            "message": f"Vendor {vendor.business_name} has been approved successfully.",
+            "data": VendorDashboardSerializer(vendor, context={"request": request}).data},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminVendorRejectView(APIView):
+    # Admin rejects a vendor application
+    # Vendor cannot access dashboard
+    permission_classes = [IsStaff]
+
+    @extend_schema(responses={200: None})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
+    def patch(self, request, vendor_id):
+        try:
+            vendor = get_vendor_by_id(vendor_id)
+        except Vendor.DoesNotExist:
+            return Response(
+                {"error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            vendor = reject_vendor(
+                vendor=vendor,
+                rejected_by=request.user
+            )
+        except ValidationError as e:
+            return Response({
+                "error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"Admin {request.user.username} rejected vendor {vendor.business_name}")
+
+        return Response({
+            "message": f"Vendor {vendor.business_name} application has been rejected."},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminVendorActivateView(APIView):
+    permission_classes = [IsStaff]
+
+    @extend_schema(responses={200: None})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
+    def patch(self, request, vendor_id):
+        try:
+            vendor = get_vendor_by_id(vendor_id)
+        except Vendor.DoesNotExist:
+            return Response({
+                "error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            vendor = activate_vendor(
+                vendor=vendor,
+                activated_by=request.user
+            )
+        except ValidationError as e:
+            return Response({
+                "error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        logger.info(f"Admin {request.user.username} activated vendor: {vendor.business_name}")
+
+        return Response({
+            "message": f"Vendor {vendor.business_name} has been activated."},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminVendorDeactivateView(APIView):
+    # Admin deactivates an approved vendor
+    # Use case: vendor violates terms, poor performance
+    # Vendor loses access to dashboard immediately
+    permission_classes = [IsStaff]
+
+    @extend_schema(responses={200: None})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
+    def patch(self, request, vendor_id):
+        try:
+            vendor = get_vendor_by_id(vendor_id)
+        except Vendor.DoesNotExist:
+            return Response(
+                {"error": "Vendor not found!"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            vendor = deactivate_vendor(
+                vendor=vendor,
+                deactivated_by=request.user
+            )
+        except ValidationError as e:
+            return Response(
+                {"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(
+            f"Admin {request.user.username} deactivated vendor: {vendor.business_name}"
+        )
+
+        return Response({
+            "message": f"Vendor {vendor.business_name} has been deactivated."}, 
+            status=status.HTTP_200_OK
+        )

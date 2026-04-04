@@ -12,16 +12,23 @@ def create_review(order, user, validated_data):
     if hasattr(order, "review"):
         raise ValidationError("You have already reviewed this order")
     
-    review = Review.objects.create(
+    validated_data.pop("vendor", None)
+    validated_data.pop("order", None)
+    
+    review = Review(
         order=order,
         user=user,
+        vendor=order.vendor,
         **validated_data
     )
+    review.full_clean()
+    review.save()
 
     food_ids = order.items.values_list("food__id", flat=True)
     for food_id in food_ids:
-        cache.delete(f"food_reviews_{food_id}")
-        cache.delete(f"food_review_stats_{food_id}")
+        cache.delete(f"food_reviews_stats_{food_id}")
+    if order.vendor_id:
+        cache.delete(f"vendor_reviews_stats_{order.vendor_id}")
     
     return review
 

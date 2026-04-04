@@ -30,7 +30,7 @@ class IsApprovedVendor(BasePermission):
             request.user.vendor.is_active
         )
 
-class IsVendorOrderOwner(BasePermission):
+class IsVendorOwner(BasePermission):
     def has_object_permission(self, request, view, obj):
         if not hasattr(request.user, "vendor"):
             return False

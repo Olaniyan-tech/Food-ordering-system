@@ -59,7 +59,7 @@ def activate_vendor(vendor, activated_by):
     return vendor
 
 @transaction.atomic
-def create_food(vendor, validated_data):
+def create_vendor_food(vendor, validated_data):
     if not vendor.is_approved:
         raise ValidationError("Your account must be approved before adding foods.")
 
@@ -67,26 +67,19 @@ def create_food(vendor, validated_data):
     return food
 
 @transaction.atomic
-def update_food(food, validated_data):
+def update_vendor_food(food, validated_data):
     for field, value in validated_data.items():
         setattr(food, field, value)
     food.save()
     return food
 
 @transaction.atomic
-def delete_food(food):
+def delete_vendor_food(food):
     food.delete()
 
 @transaction.atomic
-def toggle_food_availability(food):
+def toggle_vendor_food_availability(food):
     food.available = not food.available
     food.save(update_fields=["available", "updated_at"])
     return food
 
-@transaction.atomic
-def update_food_stock(food, quantity):
-    food.stock = quantity
-    if food.stock == 0:
-        food.available = False
-    food.save(update_fields=["stock", "available", "updated_at"])
-    return food

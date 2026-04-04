@@ -56,7 +56,7 @@ def get_food_reviews(food_id):
             order__items__food__id=food_id
         ).select_related("user").order_by("-created_at")
 
-def get_food_review_stats(food_id):
+def get_food_reviews_stats(food_id):
     cache_key = f"food_reviews_stats_{food_id}"
     stats = cache.get(cache_key)
 
@@ -112,8 +112,8 @@ def get_vendor_reviews(vendor):
         vendor=vendor
     ).select_related("user", "order").order_by("-created_at")
 
-def get_vendor_review_stats(vendor_id):
-    cache_key = f"vendor_review_stats_{vendor_id}"
+def get_vendor_reviews_stats(vendor_id):
+    cache_key = f"vendor_reviews_stats_{vendor_id}"
     stats = cache.get(cache_key)
 
     if stats is None:
@@ -159,7 +159,6 @@ def get_vendor_dashboard_stats(vendor):
             "cancelled_orders": stats["cancelled_orders"] or 0,
         },
     }
-
 
 
 # def get_food_by_id(food_id):

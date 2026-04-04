@@ -72,7 +72,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     def validate_phone(self, value):
         validate_phone_format(value)
-        if Profile.objects.filter(phone=value).exclude(id=self.instance.user.id).exists():
+        if Profile.objects.filter(phone=value).exclude(id=self.instance.id).exists():
             raise serializers.ValidationError("Phone number already exists")
         return value
 

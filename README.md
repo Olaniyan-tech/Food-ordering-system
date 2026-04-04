@@ -8,26 +8,26 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 
 ## 🔹 User Features
 
-- User registration and authentication (JWT + cookies)
-
-- Secure token refresh and logout 
-
-- Browse food items across multiple vendors
-
-- View vendor profiles and menus
-
-- Adding items to cart (with quantity)
-
-- Updating cart items (increase, decrease, delete)
-
-- Place orders per vendor 
-
-- Checkout with address and phone number submission
-
-- Cancel pending orders
-
-- Leave reviews for orders and vendors
-
+   - User registration and authentication (JWT + cookies)
+   
+   - Secure token refresh and logout 
+   
+   - Browse food items across multiple vendors
+   
+   - View vendor profiles and menus
+   
+   - Adding items to cart (with quantity)
+   
+   - Updating cart items (increase, decrease, delete)
+   
+   - Place orders per vendor 
+   
+   - Checkout with address and phone number submission
+   
+   - Cancel pending orders
+   
+   - Leave reviews for orders and vendors
+   
 
 
 ## 🔹 Vendor Features

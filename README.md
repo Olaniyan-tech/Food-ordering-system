@@ -27,7 +27,7 @@ The system uses JWT authentication with secure cookie-based storage and is desig
    - Cancel pending orders
    
    - Leave reviews for orders and vendors
-   
+
 ## 🔹 Vendor Features
 
    - Vendor registration and onboarding

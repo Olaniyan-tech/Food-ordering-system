@@ -120,7 +120,7 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 | `/api/accounts/logout/` | POST | Logout user and blacklist refresh token |
 | `/api/users/profile/` | POST | Retrieve logged-in user's profile |
 
-### Menu & Orders
+### Menu & Orders (Users)
 
 | Endpoint | Method | Description |
 |--------|--------|------------|
@@ -138,6 +138,36 @@ The system uses JWT authentication with secure cookie-based storage and is desig
 | `/api/order/<int:order_id>/review/update/` | PATCH | Update order reviews |
 | `/api/order/<int:order_id>/review/detail/` | GET | Get a detail of a particular review |
 | `/api/foods/<int:food_id>/reviews/` | GET | View all reviews for a food item |
+
+### Menu & Orders (Vendors)
+
+| Endpoint | Method | Description |
+|--------|--------|------------|
+| `/api/vendors/` | GET | List all approved vendors for users |
+| `/api/vendor/<slug:slug>/details/` | GET | View details of a specific vendor |
+| `/api/vendor/<slug:slug>/foods/` | GET | List all foods offered by a specific vendor |
+| `/api/vendor/<slug:slug>/reviews/` | GET | Retrieve reviews for a vendor |
+| `/api/vendor/apply/` | POST | Apply to become a vendor |
+| `/api/vendor/dashboard/` | GET | Vendor viewing their own profile |
+| `/api/vendor/dashboard/stats/` | GET | Vendor viewing their stats including total orders, total reviews, etc |
+| `/api/vendor/profile/update/` | PATCH | Update profile details. |
+| `/api/vendor/create_food/` | POST | Add a new food item | 
+| `/api/vendor/all_foods/` | GET | List all foods created by the vendor | 
+| `/api/vendor/food/<int:food_id>/details/` | GET, PATCH, DELETE | View, update, or delete a specific food item. |
+| `/api/vendor/food/<int:food_id>/available/` | PATCH | Toggle a food item’s availability |
+| `/api/vendor/all_orders/` | GET | List all orders for the vendor |
+| `/api/vendor/order/<int:order_id>/details/` | GET | View details of a specific order |
+
+### Admin
+
+| Endpoint | Method | Description |
+|--------|--------|------------|
+| `/api/admin/vendors/` | GET | List all vendors for admin review |
+| `/api/admin/vendor/<int:vendor_id>/details/` | GET | View details of a specific vendor |
+| `/api/admin/vendor/<int:vendor_id>/approve/` | PATCH | Approve a vendor application |
+| `/api/admin/vendor/<int:vendor_id>/reject/` | PATCH | Reject a vendor application |
+| `/api/admin/vendor/<int:vendor_id>/activate/` | PATCH | Activate a vendor account |
+| `/api/admin/vendor/<int:vendor_id>/deactivate/` | PATCH | Deactivate a vendor account |
 
 
 ## Example Requests

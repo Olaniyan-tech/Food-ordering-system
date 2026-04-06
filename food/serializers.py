@@ -23,13 +23,16 @@ class VendorRegistrationSerializer(serializers.ModelSerializer):
         fields = (
             "business_name",
             "description",
-            "logo",
+            "profile_photo",
             "phone",
             "address",
             "city",
             "state",
             "country",
         )
+    
+    def validate_phone(self, value):
+        return validate_vendor_phone(value, self.instance)
 
 
 class VendorProfileSerializer(serializers.ModelSerializer):
@@ -39,7 +42,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             "id", 
             "business_name",
             "description",
-            "logo",
+            "profile_photo",
             "city",
             "state",
             "is_active"
@@ -52,7 +55,7 @@ class VendorProfileUpdateSerializer(serializers.ModelSerializer):
         fields = (
             "business_name",
             "description",
-            "logo",
+            "profile_photo",
             "phone",
             "address",
             "city",
@@ -70,8 +73,6 @@ class VendorProfileUpdateSerializer(serializers.ModelSerializer):
    
 
 class VendorDashboardSerializer(serializers.ModelSerializer):
-    total_foods = serializers.SerializerMethodField()
-    total_orders = serializers.SerializerMethodField()
     is_approved = serializers.BooleanField(read_only=True)
 
     class Meta:
@@ -81,7 +82,7 @@ class VendorDashboardSerializer(serializers.ModelSerializer):
             "business_name",
             "slug",
             "description",
-            "logo",
+            "profile_photo",
             "phone",
             "address",
             "city",
@@ -106,7 +107,7 @@ class AdminVendorListSerializer(serializers.ModelSerializer):
             "id",
             "business_name",
             "slug",
-            "logo",
+            "profile_photo",
             "city",
             "state",
             "is_active",      
@@ -126,10 +127,12 @@ class FoodSerializer(serializers.ModelSerializer):
             "id", 
             "vendor", 
             "name", 
+            "slug",
             "price", 
             "description", 
             "image", 
             "category", 
+            "available",
             "stock"
         )
     
@@ -147,7 +150,6 @@ class FoodWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Food
         fields = (
-            "id", 
             "category", 
             "name",  
             "description", 

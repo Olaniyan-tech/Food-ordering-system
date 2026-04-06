@@ -1,7 +1,28 @@
 from django.core.exceptions import ValidationError
-from food.models import Review
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
+from food.models import Review
 
+
+def _food_reviews_stats_cache_key(food_id):
+    return f"food_reviews_stats_{food_id}"
+
+def _vendor_reviews_stats_cache_key(vendor_id):
+    return f"vendor_reviews_stats_{vendor_id}"
+
+def _invalidate_review_stats_cache(order):
+    food_ids = set(order.items.values_list("food_id", flat=True).distinct())
+    cache_keys = [
+        _food_reviews_stats_cache_key(food_id)
+        for food_id in food_ids
+        if food_id is not None
+    ]
+    if order.vendor_id:
+        cache_keys.append(_vendor_reviews_stats_cache_key(order.vendor_id))
+    if cache_keys:
+        cache.delete_many(cache_keys)
+
+@transaction.atomic
 def create_review(order, user, validated_data):
     if order.user != user:
         raise ValidationError("You can only review your own orders")
@@ -9,28 +30,27 @@ def create_review(order, user, validated_data):
     if order.status != "DELIVERED":
         raise ValidationError("You can only review delivered orders")
     
-    if hasattr(order, "review"):
+    if Review.objects.filter(order_id=order.id).exists():
         raise ValidationError("You have already reviewed this order")
     
-    validated_data.pop("vendor", None)
-    validated_data.pop("order", None)
+    data = dict(validated_data)
+    data.pop("vendor", None)
+    data.pop("order", None)
     
     review = Review(
         order=order,
         user=user,
         vendor=order.vendor,
-        **validated_data
+        **data
     )
-    review.full_clean()
-    review.save()
+    try:
+        review.full_clean()
+        review.save()
+    except IntegrityError as exc:
+        raise ValidationError("You have already reviewed this order") from exc
 
-    food_ids = order.items.values_list("food__id", flat=True)
-    for food_id in food_ids:
-        cache.delete(f"food_reviews_stats_{food_id}")
-    if order.vendor_id:
-        cache.delete(f"vendor_reviews_stats_{order.vendor_id}")
+    _invalidate_review_stats_cache(order)
     
     return review
-
 
 

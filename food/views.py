@@ -6,7 +6,6 @@ import hashlib
 from food.constants import PAYSTACK_SUCCESS_STATUS
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import generics
@@ -34,7 +33,11 @@ from food.services.order_service import (
     update_payment_status
 )    
 from food.services.payment_service import initialize_payment, verify_payment
-from food.services.review_service import create_review
+from food.services.review_service import (
+    create_review, 
+    _food_reviews_stats_cache_key,
+    _vendor_reviews_stats_cache_key
+)
 from food.services.vendor_services import (
     register_vendor,
     update_vendor_profile,
@@ -73,13 +76,10 @@ from food.selectors import (
 from food.filters import FoodFilter, OrderFilter
 from rest_framework.pagination import PageNumberPagination
 from food.permissions import (
-    IsStaffOrReadOnly, 
     IsOrderOwner, 
     IsStaff, 
-    IsVendor,
     IsApprovedVendor,
     IsVendorOwner,
-    IsStaffOrVendorOwner
 )
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.core.exceptions import ValidationError
@@ -186,6 +186,11 @@ class RemoveFromCartView(APIView):
         user = request.user
         item_id = request.data.get("item_id")
         action = request.data.get("action")  # 'decrease' or 'delete'
+
+        if not item_id:
+            return Response({"error": "item_id is required"},
+                 status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not action:
             return Response({"error": "Action is required"},
@@ -512,10 +517,9 @@ class UpdateReviewView(APIView):
         serializer.save()
         food_ids = order.items.values_list("food__id", flat=True)
         for food_id in food_ids:
-            cache.delete(f"food_reviews_{food_id}")
-            cache.delete(f"food_review_stats_{food_id}")
+            cache.delete(_food_reviews_stats_cache_key(food_id))
         if order.vendor_id:
-            cache.delete(f"vendor_review_stats_{order.vendor_id}")
+            cache.delete(_vendor_reviews_stats_cache_key(order.vendor_id))
         logger.info(f"User {request.user.username} updated review for Order {order_id}")
 
         return Response({
@@ -705,6 +709,7 @@ class VendorRegistrationView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(request=VendorRegistrationSerializer, responses={201: VendorProfileSerializer})
+    @method_decorator(ratelimit(key="user", rate="10/m", method="POST", block=True))
     def post(self, request):
         serializer = VendorRegistrationSerializer(
             data=request.data, 
@@ -753,13 +758,10 @@ class VendorDashboardView(APIView):
 class VendorDashboardStatsView(APIView):
     permission_classes = [IsApprovedVendor]
 
-    @extend_schema(responses={200: VendorDashboardSerializer})
     @method_decorator(ratelimit(key="user", rate="30/m", method="GET", block=True))
     def get(self, request):
         vendor = request.user.vendor
-
         stats = get_vendor_dashboard_stats(vendor)
-
         return Response(stats, status=status.HTTP_200_OK)
 
 
@@ -866,6 +868,8 @@ class VendorFoodDetailView(APIView):
         self.check_object_permissions(request, food)
         return food
     
+    @extend_schema(responses={200: FoodSerializer})
+    @method_decorator(ratelimit(key ="user", rate="30/m", method="GET", block=True))
     def get(self, request, food_id):
         food = self.get_food(request, food_id)
         return Response(
@@ -873,6 +877,9 @@ class VendorFoodDetailView(APIView):
             status=status.HTTP_200_OK
         )
     
+
+    @extend_schema(request=FoodWriteSerializer, responses={200: FoodSerializer})
+    @method_decorator(ratelimit(key="user", rate="20/m", method="PATCH", block=True))
     def patch(self, request, food_id):
         food = self.get_food(request, food_id)
         serializer = FoodWriteSerializer(
@@ -903,9 +910,17 @@ class VendorFoodDetailView(APIView):
             status=status.HTTP_200_OK
         )
 
+    @extend_schema(responses={204: None})
+    @method_decorator(ratelimit(key="user", rate="10/m", method="DELETE", block=True))
     def delete(self, request, food_id):
         food = self.get_food(request, food_id)
-        delete_vendor_food(food)
+        try:
+            delete_vendor_food(food)
+        except ValidationError as e:
+            return Response(
+                {"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         logger.info(f"Vendor {request.user.vendor.business_name} deleted food: {food.name}")
 
@@ -933,7 +948,13 @@ class VendorFoodToggleAvailabilityView(APIView):
             
         self.check_object_permissions(request, food)
     
-        food = toggle_vendor_food_availability(food)
+        try:
+            food = toggle_vendor_food_availability(food)
+        except ValidationError as e:
+            return Response(
+                {"error": e.messages[0] if e.messages else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         logger.info(
             f"{food.name} is now {'available' if food.available else 'unavailable'}"
@@ -1053,10 +1074,7 @@ class AdminApproveVendorView(APIView):
             )
 
         try:
-            vendor = approve_vendor(
-                vendor=vendor,
-                approved_by=request.user
-            )
+            vendor = approve_vendor(vendor=vendor, approved_by=request.user)
         except ValidationError as e:
             return Response({
                 "error": e.messages[0] if e.messages else str(e)},
@@ -1091,10 +1109,7 @@ class AdminVendorRejectView(APIView):
             )
         
         try:
-            vendor = reject_vendor(
-                vendor=vendor,
-                rejected_by=request.user
-            )
+            vendor = reject_vendor(vendor=vendor, rejected_by=request.user)
         except ValidationError as e:
             return Response({
                 "error": e.messages[0] if e.messages else str(e)},
@@ -1124,10 +1139,7 @@ class AdminVendorActivateView(APIView):
             )
 
         try:
-            vendor = activate_vendor(
-                vendor=vendor,
-                activated_by=request.user
-            )
+            vendor = activate_vendor(vendor=vendor, activated_by=request.user)
         except ValidationError as e:
             return Response({
                 "error": e.messages[0] if e.messages else str(e)},
@@ -1160,10 +1172,7 @@ class AdminVendorDeactivateView(APIView):
             )
 
         try:
-            vendor = deactivate_vendor(
-                vendor=vendor,
-                deactivated_by=request.user
-            )
+            vendor = deactivate_vendor(vendor=vendor, deactivated_by=request.user)
         except ValidationError as e:
             return Response(
                 {"error": e.messages[0] if e.messages else str(e)},

@@ -40,7 +40,7 @@ def get_order_by_id_for_email(order_id):
     ).get(id=order_id)
 
 def get_order_by_reference(reference, user):
-    return Order.objects.get(
+    return Order.objects.select_related("user", "vendor").get(
         payment_reference=reference, 
         user=user
     )
@@ -54,7 +54,7 @@ def get_order_review(order):
 def get_food_reviews(food_id):
     return Review.objects.filter(
             order__items__food__id=food_id
-        ).select_related("user").order_by("-created_at")
+        ).select_related("user", "vendor").order_by("-created_at")
 
 def get_food_reviews_stats(food_id):
     cache_key = f"food_reviews_stats_{food_id}"
@@ -105,7 +105,7 @@ def get_vendor_orders(vendor):
 def get_vendor_order_by_id(vendor, order_id):
     return Order.objects.prefetch_related(
         "items__food"
-    ).get(id=order_id, vendor=vendor)
+    ).select_related("user").get(id=order_id, vendor=vendor)
 
 def get_vendor_reviews(vendor):
     return Review.objects.filter(
@@ -132,6 +132,11 @@ def get_vendor_reviews_stats(vendor_id):
     return stats
 
 def get_vendor_dashboard_stats(vendor):
+    cache_key = f"vendor_dashboard_stats_{vendor.id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+    
     stats = Order.objects.filter(vendor=vendor).aggregate(
         total_orders=Count("id"),
         pending_orders=Count("id", filter=Q(status="PENDING")),
@@ -144,7 +149,7 @@ def get_vendor_dashboard_stats(vendor):
         total_earnings=Sum("total", filter=Q(payment_status="PAID")),
     )
 
-    return {
+    result = {
         "total_orders": stats["total_orders"] or 0,
         "total_earnings": stats["total_earnings"] or 0,
         "total_foods": Food.objects.filter(vendor=vendor).count(),
@@ -159,6 +164,10 @@ def get_vendor_dashboard_stats(vendor):
             "cancelled_orders": stats["cancelled_orders"] or 0,
         },
     }
+    
+    cache.set(cache_key, result, timeout=300)
+    return result
+
 
 
 # def get_food_by_id(food_id):

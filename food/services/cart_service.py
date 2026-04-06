@@ -45,14 +45,16 @@ def remove_item_from_cart(user, item_id, action):
     except OrderItem.DoesNotExist:
         raise ValidationError("Item not found in Cart")
     
-    order = Order.objects.select_for_update().filter(user=user, vendor=item.food.vendor, status="PENDING").first()
+    order = Order.objects.select_for_update().filter(
+        user=user, 
+        vendor=item.food.vendor, 
+        status="PENDING").first()
+    
     if not order:
         raise ValidationError("Cart is empty")
     
-    try:
-        item = order.items.select_for_update().get(id=item_id)
-    except OrderItem.DoesNotExist:
-        raise ValidationError("Item not found in Cart")
+    if item.order_id != order.id:
+        raise ValidationError("Item does not belong to your cart")
 
     if action == "decrease":
         item.quantity = F("quantity") - 1

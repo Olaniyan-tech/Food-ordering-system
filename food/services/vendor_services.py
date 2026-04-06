@@ -1,85 +1,154 @@
 from food.models import Vendor, Food
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError
-from django.core.cache import cache
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _save_with_updated_at(instance, update_fields=None):
+    if not update_fields:
+        instance.save()
+        return instance
+
+    fields = list(update_fields)
+    if hasattr(instance, "updated_at") and "updated_at" not in fields:
+        fields.append("updated_at")
+    instance.save(update_fields=fields)
+    return instance
+
+
+def _apply_updates(instance, validated_data, allowed_fields=None):
+    if allowed_fields:
+        validated_data = {
+            field: value for field, value in validated_data.items() if field in allowed_fields
+        }
+    for field, value in validated_data.items():
+            setattr(instance, field, value)
+
+    return _save_with_updated_at(instance, update_fields=validated_data.keys())
+
+
+def _ensure_vendor_can_manage_food(vendor):
+    if not vendor.is_approved:
+        raise ValidationError("Your account must be approved before managing foods.")
+    if not vendor.is_active:
+        raise ValidationError("Your account must be active to manage foods.")
+
+
+def _ensure_food_vendor_can_manage(food):
+    if not food.vendor:
+        raise ValidationError("Food is not associated with a vendor.")
+    _ensure_vendor_can_manage_food(food.vendor)
+
 
 @transaction.atomic
 def register_vendor(user, validated_data):
-    if hasattr(user, "vendor"):
+    business_name = validated_data.get("business_name")
+    if not business_name:
+        raise ValidationError("Business name is required.")
+
+    if Vendor.objects.filter(user=user).exists():
         raise ValidationError("You already have a vendor profile.")
+
+    if Vendor.objects.filter(business_name__iexact=business_name).exists():
+        raise ValidationError("This business name is already taken.")
+
+    try:
+        vendor = Vendor.objects.create(user=user, **validated_data)
+    except IntegrityError as exc:
+        raise ValidationError("Vendor profile already exists or business name is already taken.") from exc
     
-    if Vendor.objects.filter(
-        business_name__iexact=validated_data["business_name"]
-        ).exists():
-        raise ValidationError("A vendor with this business name already exists.")
-    
-    vendor = Vendor.objects.create(user=user, **validated_data)
     return vendor
+
 
 @transaction.atomic
 def update_vendor_profile(vendor, validated_data):
-    for field, value in validated_data.items():
-        setattr(vendor, field, value)
-    vendor.save()
-    return vendor
+    return _apply_updates(
+        vendor, 
+        validated_data,
+        allowed_fields=[
+            "business_name",
+            "description",
+            "profile_photo",
+            "phone",
+            "address",  
+            "city", 
+            "state", 
+            "country"
+        ]
+    )
+
 
 @transaction.atomic
-def approve_vendor(vendor, approved_by):
+def approve_vendor(vendor, approved_by=None):
     if vendor.is_approved:
         raise ValidationError("Vendor is already approved")
     vendor.is_approved = True
     vendor.is_active = True
-    vendor.save(update_fields=["is_approved", "is_active", "updated_at"])
-    return vendor
+    result = _save_with_updated_at(vendor, update_fields=["is_approved", "is_active"])
+    if approved_by:
+        logger.info(f"Vendor '{vendor.business_name}' approved by user '{approved_by.username}'")
+    return result
+
 
 @transaction.atomic
-def reject_vendor(vendor, rejected_by):
+def reject_vendor(vendor, rejected_by=None):
     if vendor.is_approved:
         raise ValidationError("Cannot reject an already approved vendor.")
     vendor.is_active = False
-    vendor.save(update_fields=["is_active", "updated_at"])
-    return vendor
+    result = _save_with_updated_at(vendor, update_fields=["is_active"])
+    if rejected_by:
+        logger.info(f"Vendor '{vendor.business_name}' rejected by user '{rejected_by.username}'")
+    return result
+
 
 @transaction.atomic
-def deactivate_vendor(vendor, deactivated_by):
+def deactivate_vendor(vendor, deactivated_by=None):
     if not vendor.is_active:
         raise ValidationError("Vendor is already deactivated.")
     vendor.is_active = False
-    vendor.save(update_fields=["is_active", "updated_at"])
-    return vendor
+    result = _save_with_updated_at(vendor, update_fields=["is_active"])
+    if deactivated_by:
+        logger.info(f"Vendor '{vendor.business_name}' deactivated by user '{deactivated_by.username}'")
+    return result
+
 
 @transaction.atomic
-def activate_vendor(vendor, activated_by):
+def activate_vendor(vendor, activated_by=None):
     if vendor.is_active:
         raise ValidationError("Vendor is already active.")
     if not vendor.is_approved:
         raise ValidationError("Vendor must be approved before activation.")
     vendor.is_active = True
-    vendor.save(update_fields=["is_active", "updated_at"])
-    return vendor
+    result = _save_with_updated_at(vendor, update_fields=["is_active"])
+    if activated_by:
+        logger.info(f"Vendor '{vendor.business_name}' activated by user '{activated_by.username}'")
+    return result
+
 
 @transaction.atomic
 def create_vendor_food(vendor, validated_data):
-    if not vendor.is_approved:
-        raise ValidationError("Your account must be approved before adding foods.")
+    _ensure_vendor_can_manage_food(vendor)
+    return Food.objects.create(vendor=vendor, **validated_data)
 
-    food = Food.objects.create(vendor=vendor, **validated_data)
-    return food
 
 @transaction.atomic
-def update_vendor_food(food, validated_data):
-    for field, value in validated_data.items():
-        setattr(food, field, value)
-    food.save()
-    return food
+def update_vendor_food(food, user, validated_data):
+    _ensure_food_vendor_can_manage(food)
+    return _apply_updates(food, validated_data)
+
 
 @transaction.atomic
 def delete_vendor_food(food):
+    _ensure_food_vendor_can_manage(food)
     food.delete()
+
 
 @transaction.atomic
 def toggle_vendor_food_availability(food):
+    _ensure_food_vendor_can_manage(food)
+    if not food.available and food.stock == 0:
+        raise ValidationError("Cannot mark food available with zero stock.")
     food.available = not food.available
-    food.save(update_fields=["available", "updated_at"])
-    return food
-
+    return _save_with_updated_at(food, update_fields=["available"])

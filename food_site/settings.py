@@ -25,6 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+
+
 SECRET_KEY = config("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -109,31 +111,29 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher'
 ]
 
+ENV = os.environ.get("ENVIRONMENT", "development")
 
-if os.environ.get("ENVIRONMENT") == "production":
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
-            "LOCATION": config("REDIS_URL"),
-            "OPTIONS": {
-                "ssl_cert_reqs": ssl.CERT_REQUIRED
-            }
-        }        
-    }
-    RATELIMIT_USE_CACHE = "default"
+IS_PROD = ENV == "production"
 
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
-        }
-    }
 
-    RATELIMIT_USE_CACHE = "default"
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache" if IS_PROD else "django.core.cache.backends.dummy.DummyCache",
+        "LOCATION": config("REDIS_URL") if IS_PROD else None,
+        "OPTIONS": {
+            "ssl_cert_reqs": ssl.CERT_REQUIRED
+        } if IS_PROD else {},
+    }        
+}
+
+RATELIMIT_USE_CACHE = "default"
 
 RATELIMIT_EXCEPTION_CLASS = "django_ratelimit.exceptions.Ratelimited"
 
 
+CELERY_BROKER_URL = config("REDIS_URL") if IS_PROD else "redis://127.0.0.1:6379/0"
+CELERY_RESULT_BACKEND = config("REDIS_URL") if IS_PROD else None
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT")
@@ -143,9 +143,6 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")
 
-
-CELERY_BROKER_URL = config("REDIS_URL")
-CELERY_RESULT_BACKEND = config("REDIS_URL")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

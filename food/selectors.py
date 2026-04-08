@@ -1,9 +1,19 @@
-from food.models import Food, Order, Review, Vendor
+from food.models import Food, Order, Review, Vendor, Category
 from django.db.models import Avg, Count, Sum, Q
 from django.core.cache import cache
 
+
+def get_all_categories():
+    return Category.objects.all().order_by("name")
+
+def get_category_by_slug(slug):
+    return Category.objects.get(slug=slug)
+
+def get_category_by_id(category_id):
+    return Category.objects.get(id=category_id)
+
 def get_available_foods(vendor=None):
-    qs = Food.objects.filter(available=True).select_related("vendor", "category")
+    qs = Food.objects.filter(available=True).select_related("vendor", "category").order_by("id")
     if vendor:
         qs = qs.filter(vendor=vendor)
     return qs
@@ -80,7 +90,7 @@ def get_all_vendors():
     return Vendor.objects.filter(
         is_approved=True,
         is_active=True
-    )
+    ).order_by("id")
 
 def get_vendor_by_slug(slug):
     return Vendor.objects.get(slug=slug, is_active=True, is_approved=True)
@@ -89,10 +99,10 @@ def get_vendor_by_id(vendor_id):
     return Vendor.objects.get(id=vendor_id)
 
 def get_pending_vendors():
-    return Vendor.objects.filter(is_approved=False)
+    return Vendor.objects.filter(is_approved=False).order_by("id")
 
 def get_vendor_foods(vendor, available_only=False):
-    qs = Food.objects.filter(vendor=vendor).select_related("category")
+    qs = Food.objects.filter(vendor=vendor).select_related("category").order_by("id")
     if available_only:
         qs = qs.filter(available=True)
     return qs

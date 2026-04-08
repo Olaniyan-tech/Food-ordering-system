@@ -10,7 +10,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Category(models.Model):
     name = models.CharField(max_length=70, db_index=True)
-    slug = models.SlugField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -26,7 +26,7 @@ class Category(models.Model):
 class Vendor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="vendor")
     business_name = models.CharField(max_length=200)
-    slug = models.SlugField(unique=True)
+    slug = models.SlugField(unique=True, blank=True)
     description = models.TextField(blank=True)
     profile_photo = models.ImageField(upload_to="vendors/", null=True, blank=True)
     phone = models.CharField(max_length=20, blank=True)
@@ -66,6 +66,15 @@ class Food(models.Model):
     stock = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                Lower("name"), 
+                "vendor",  
+                name="unique_vendor_food_name_ci"
+            )
+        ]
 
     def save(self, *args, **kwargs):
         if self.stock == 0:

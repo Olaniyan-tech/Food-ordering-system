@@ -111,10 +111,9 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher'
 ]
 
-ENV = os.environ.get("ENVIRONMENT", "development")
+ENV = config("ENVIRONMENT", default="development")
 
 IS_PROD = ENV == "production"
-
 
 
 CACHES = {
@@ -122,9 +121,10 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.redis.RedisCache" if IS_PROD else "django.core.cache.backends.dummy.DummyCache",
         "LOCATION": config("REDIS_URL") if IS_PROD else None,
         "OPTIONS": {
-            "ssl_cert_reqs": ssl.CERT_REQUIRED
-        } if IS_PROD else {},
-    }        
+            "socket_connect_timeout": 5,
+            "socket_timeout": 5,
+        } if IS_PROD else {}
+    }
 }
 
 RATELIMIT_USE_CACHE = "default"
@@ -132,8 +132,6 @@ RATELIMIT_USE_CACHE = "default"
 RATELIMIT_EXCEPTION_CLASS = "django_ratelimit.exceptions.Ratelimited"
 
 
-CELERY_BROKER_URL = config("REDIS_URL") if IS_PROD else "redis://127.0.0.1:6379/0"
-CELERY_RESULT_BACKEND = config("REDIS_URL") if IS_PROD else None
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT")
@@ -148,8 +146,18 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Africa/Lagos"
 
-CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
-CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+if IS_PROD:
+    CELERY_BROKER_URL = config("REDIS_URL")
+    CELERY_RESULT_BACKEND = config("REDIS_URL")
+    CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
+else:
+    # Local dev (Docker)
+    CELERY_BROKER_URL = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+    CELERY_BROKER_USE_SSL = {}
+    CELERY_REDIS_BACKEND_USE_SSL = {}
+
 
 BREVO_API_KEY = config("BREVO_API_KEY")
 

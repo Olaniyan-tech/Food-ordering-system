@@ -209,6 +209,9 @@ class RemoveFromCartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )       
 
+        if order is None:
+            return Response({"message": "Cart is now empty"}, status=status.HTTP_200_OK)
+        
         order = get_order_by_id(order.id)
         serializer = OrderSerializer(order)
         return Response(serializer.data, status=status.HTTP_200_OK)

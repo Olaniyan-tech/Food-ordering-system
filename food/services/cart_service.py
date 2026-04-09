@@ -39,15 +39,20 @@ def add_item_to_cart(user, food, quantity=1):
 @transaction.atomic
 def remove_item_from_cart(user, item_id, action):
     try:
-        item = OrderItem.objects.select_for_update().select_related(
+        item = OrderItem.objects.select_related(
             "food__vendor", "order"
         ).get(id=item_id)
+
+        item = OrderItem.objects.select_for_update().get(id=item.id)
+
+        item.refresh_from_db()
+        food = Food.objects.select_related("vendor").get(id=item.food_id)
     except OrderItem.DoesNotExist:
         raise ValidationError("Item not found in Cart")
     
     order = Order.objects.select_for_update().filter(
         user=user, 
-        vendor=item.food.vendor, 
+        vendor=food.vendor, 
         status="PENDING").first()
     
     if not order:
@@ -69,6 +74,10 @@ def remove_item_from_cart(user, item_id, action):
 
     else:
         raise ValidationError("Invalid action")
+    
+    if not order.items.exists():
+        order.delete()
+        return None
     
     update_order_total(order)
     return order
